@@ -42,7 +42,17 @@ impl Game<'_> {
         // NativeActivity's separate winit IME calls must not steal that focus.
         #[cfg(target_os = "android")]
         let want = crate::platform::active();
-        #[cfg(not(target_os = "android"))]
+        // iOS: allowing text input shows the keyboard, so only after a tap on the field asked
+        // for it; the request ends with the focus.
+        #[cfg(target_os = "ios")]
+        let want = {
+            let focused = self.text_field_focused();
+            if !focused {
+                crate::platform::hide();
+            }
+            focused && crate::platform::active()
+        };
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let want = self.text_field_focused();
         if want != self.ime_allowed
             && let Some(_window) = &self.window

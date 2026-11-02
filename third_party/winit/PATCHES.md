@@ -16,3 +16,8 @@ On iOS, `Window::inner_size` and `inner_position` return the whole view (the sam
 renderer sized from either draws edge to edge. The safe area is
 `WindowExtIOS::safe_area_insets()`: physical left, top, right and bottom insets. Other backends are
 unchanged.
+
+The iOS on-screen keyboard's characters arrive with the key code of the US-layout key that types
+them (letters, digits, punctuation, Space), and Return as the Enter key without text, instead of an
+unidentified key: code that reads key codes, like a chat box, then takes the typed text. The text
+itself is unchanged.

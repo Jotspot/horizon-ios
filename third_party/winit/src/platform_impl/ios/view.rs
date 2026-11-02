@@ -549,13 +549,23 @@ impl WinitView {
             mtm,
             text.to_string().chars().flat_map(|c| {
                 let text = smol_str::SmolStr::from_iter([c]);
+                // Horizon (PATCHES.md): Return is the Enter key, and a character the US layout
+                // types gets that key's code, so code that reads key codes (a chat box, a sign)
+                // takes the on-screen keyboard's input; the text stays the character typed.
+                let enter = c == '\n' || c == '\r';
+                let physical_key = soft_key_code(c).map_or(
+                    PhysicalKey::Unidentified(NativeKeyCode::Unidentified),
+                    PhysicalKey::Code,
+                );
+                let logical_key =
+                    if enter { Key::Named(NamedKey::Enter) } else { Key::Character(text.clone()) };
                 // Emit both press and release events
                 [ElementState::Pressed, ElementState::Released].map(|state| {
                     EventWrapper::StaticEvent(Event::WindowEvent {
                         window_id,
                         event: WindowEvent::KeyboardInput {
                             event: KeyEvent {
-                                text: if state == ElementState::Pressed {
+                                text: if state == ElementState::Pressed && !enter {
                                     Some(text.clone())
                                 } else {
                                     None
@@ -563,10 +573,8 @@ impl WinitView {
                                 state,
                                 location: KeyLocation::Standard,
                                 repeat: false,
-                                logical_key: Key::Character(text.clone()),
-                                physical_key: PhysicalKey::Unidentified(
-                                    NativeKeyCode::Unidentified,
-                                ),
+                                logical_key: logical_key.clone(),
+                                physical_key,
                                 platform_specific: KeyEventExtra {},
                             },
                             is_synthetic: false,
@@ -604,4 +612,46 @@ impl WinitView {
             }),
         );
     }
+}
+
+/// Horizon (PATCHES.md): the key of the US layout that types `c` on its own or with Shift, for the
+/// on-screen keyboard's characters; `None` for the rest (accented letters, emoji).
+fn soft_key_code(c: char) -> Option<KeyCode> {
+    use KeyCode::*;
+    const LETTERS: [KeyCode; 26] = [
+        KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO,
+        KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
+    ];
+    const DIGITS: [KeyCode; 10] =
+        [Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9];
+    Some(match c {
+        'a'..='z' => LETTERS[c as usize - 'a' as usize],
+        'A'..='Z' => LETTERS[c as usize - 'A' as usize],
+        '0'..='9' => DIGITS[c as usize - '0' as usize],
+        ')' => Digit0,
+        '!' => Digit1,
+        '@' => Digit2,
+        '#' => Digit3,
+        '$' => Digit4,
+        '%' => Digit5,
+        '^' => Digit6,
+        '&' => Digit7,
+        '*' => Digit8,
+        '(' => Digit9,
+        ' ' => Space,
+        '\n' | '\r' => Enter,
+        '\t' => Tab,
+        '-' | '_' => Minus,
+        '=' | '+' => Equal,
+        '[' | '{' => BracketLeft,
+        ']' | '}' => BracketRight,
+        '\\' | '|' => Backslash,
+        ';' | ':' => Semicolon,
+        '\'' | '"' => Quote,
+        ',' | '<' => Comma,
+        '.' | '>' => Period,
+        '/' | '?' => Slash,
+        '`' | '~' => Backquote,
+        _ => return None,
+    })
 }

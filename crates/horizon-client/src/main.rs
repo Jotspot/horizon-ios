@@ -95,6 +95,7 @@ fn ios_start() {
         eprintln!("Horizon: could not enter {}: {e}", game.display());
     }
     logging::set_game_home(game);
+    horizon_ios_sys::keyboard::observe();
 }
 
 /// The JVM raises its open-file limit to the hard limit as it starts

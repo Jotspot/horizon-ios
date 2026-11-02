@@ -8336,7 +8336,24 @@ impl Game<'_> {
             Screen::Creative => {
                 self.draw_creative(&mut batch);
             }
-            Screen::Chat => self.draw_chat_screen(&mut batch),
+            Screen::Chat => {
+                // iOS: the chat box sits above the on-screen keyboard, as Android's resized
+                // window puts it: the screen is laid out over the part the keyboard leaves.
+                #[cfg(target_os = "ios")]
+                let full = batch.height;
+                #[cfg(target_os = "ios")]
+                if let Some(window) = &self.window {
+                    let scale = window.scale_factor();
+                    let view = f64::from(window.inner_size().height) / scale;
+                    let covered = horizon_ios_sys::keyboard::covered(view) * scale;
+                    batch.height = (batch.height - covered as f32 / batch.scale).max(1.0);
+                }
+                self.draw_chat_screen(&mut batch);
+                #[cfg(target_os = "ios")]
+                {
+                    batch.height = full;
+                }
+            }
             Screen::Mod => self.draw_mod_screen(&mut batch),
             Screen::Playing | Screen::Options | Screen::Win => {}
         }
@@ -14952,6 +14969,7 @@ impl Game<'_> {
             if (crate::touch_visible() || self.settings.keypad.enabled)
                 && self.pad.touch.editor.is_none()
             {
+                self.pad.touch_ui.inset = safe_gui_insets(self.window.as_deref(), hud.scale);
                 self.pad
                     .touch_ui
                     .draw(&mut hud, &self.gui.atlas, self.pad_in_menu());
@@ -15959,18 +15977,9 @@ impl ApplicationHandler for Game<'_> {
         if let Some(renderer) = &mut self.renderer {
             renderer.suspend_surface();
         }
-        // iOS may end a backgrounded app without another call: save the world now
-        // (docs/ios.md), as `/save-all flush` on single player's server thread.
-        #[cfg(target_os = "ios")]
-        if let Some(server) = &self.integrated {
-            let started = Instant::now();
-            let saved = server.call(|g| g.owner_console_command("save-all flush"));
-            log::info!(
-                "Horizon iOS: saved on suspend in {} ms ({})",
-                started.elapsed().as_millis(),
-                if saved.is_some() { "done" } else { "no server" }
-            );
-        }
+        // iOS may end a backgrounded app without another call. Nothing more to do here: the
+        // pause screen just opened makes single player's server save, as vanilla's does
+        // ("Saving and pausing game...").
     }
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -16171,16 +16180,11 @@ impl Game<'_> {
             }
             _ => {}
         }
-        // iOS: a touch shows the touch controls, a hardware key hides them.
+        // iOS: a touch shows the touch controls. Every key event here comes from the on-screen
+        // keyboard (winit has no iOS hardware keyboard), so typing does not hide them.
         #[cfg(target_os = "ios")]
-        match &event {
-            WindowEvent::Touch(_) => crate::touch_input(true),
-            WindowEvent::KeyboardInput {
-                event,
-                is_synthetic: false,
-                ..
-            } if event.state == ElementState::Pressed => crate::touch_input(false),
-            _ => {}
+        if let WindowEvent::Touch(_) = &event {
+            crate::touch_input(true);
         }
         #[cfg(target_os = "android")]
         if !self.pad_in_menu()
@@ -19118,7 +19122,7 @@ fn load_resources(
     #[cfg(target_os = "ios")]
     if !headless {
         let fetched = Instant::now();
-        match horizon_client::android_resources::controls(vanilla_root) {
+        match horizon_client::android_resources::controls_parallel(vanilla_root) {
             Ok(()) => log::info!(
                 "Horizon iOS: touch control textures ready in {} ms",
                 fetched.elapsed().as_millis()
@@ -20345,6 +20349,21 @@ impl Loading {
         );
         Ok(Some(split::Split::new(game)))
     }
+}
+
+/// The left and right safe-area insets in GUI pixels (`scale` physical pixels each): where the
+/// touch UI's edge buttons go on iOS. Nothing elsewhere.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) fn safe_gui_insets(window: Option<&Window>, scale: f32) -> [f32; 2] {
+    #[cfg(target_os = "ios")]
+    if let Some(window) = window {
+        use winit::platform::ios::WindowExtIOS;
+        let [left, _, right, _] = window.safe_area_insets();
+        let scale = scale.max(1.0);
+        return [left as f32 / scale, right as f32 / scale];
+    }
+    let _ = (window, scale);
+    [0.0; 2]
 }
 
 /// The last step of a window's attributes: what the platform needs on top of the desktop's.

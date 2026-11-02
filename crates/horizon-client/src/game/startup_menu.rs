@@ -1700,6 +1700,7 @@ impl Loading {
         );
         #[cfg(any(target_os = "android", target_os = "ios"))]
         {
+            self.menu.touch.inset = super::safe_gui_insets(self.window.as_deref(), batch.scale);
             self.menu.touch.draw(batch, &gui.atlas, true);
             if self.menu.touch.virtual_mouse {
                 horizon_client::touch_ui::draw_pointer(batch, &gui.atlas, self.menu.cursor);

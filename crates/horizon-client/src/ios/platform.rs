@@ -1,8 +1,9 @@
 //! The iOS side of the platform calls the shared touch glue makes (`game/android_input.rs`), with
-//! the same names as `android/platform.rs`. The system keyboard is not driven from here: on iOS it
-//! follows the focused text field through winit's text input, as on desktop (`game/ime.rs`).
+//! the same names as `android/platform.rs`. The system keyboard itself comes from winit's text
+//! input (`game/ime.rs`); this module only records whether a tap asked for it.
 use horizon_client::osk::Output;
 use horizon_client::{android_gamepad::InputMode, android_runtime};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 // The input in use (touch, keyboard and mouse, or a controller) is tracked by the same shared
 // state as on Android, so the touch controls show and hide the same way.
@@ -20,15 +21,24 @@ pub(crate) fn keyboard_mouse_input() -> bool {
     android_runtime::active_input() == InputMode::KeyboardMouse
 }
 
-/// Whether the system keyboard is editing a field.
+/// A tap on a text field asked for the keyboard (`show`), and the field has kept the focus since.
+/// iOS shows the keyboard as soon as text input is allowed, so `game/ime.rs` allows it only then:
+/// a screen that focuses its search box by itself (the world list) leaves the keyboard down.
+static REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Whether the keyboard was asked for.
 pub fn active() -> bool {
-    false
+    REQUESTED.load(Ordering::Relaxed)
 }
-pub fn show(_text: &str) {}
+pub fn show(_text: &str) {
+    REQUESTED.store(true, Ordering::Relaxed);
+}
 pub fn show_multiline(text: &str) {
     show(text);
 }
-pub fn hide() {}
+pub fn hide() {
+    REQUESTED.store(false, Ordering::Relaxed);
+}
 /// The system keyboard's edits since the last call.
 pub fn poll() -> Vec<Output> {
     Vec::new()

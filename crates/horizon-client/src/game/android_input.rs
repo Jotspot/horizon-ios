@@ -409,10 +409,13 @@ impl Game<'_> {
         if !self.pad_in_menu() {
             self.open_chat("");
         }
-        // iOS: the system keyboard follows the focused field through winit's text input, as on
-        // desktop (`ime.rs`), so there is nothing more to open.
+        // iOS: the system keyboard comes from winit's text input for the focused field
+        // (`ime.rs`), once asked for.
         #[cfg(target_os = "ios")]
-        return;
+        {
+            crate::platform::show("");
+            return;
+        }
         #[cfg_attr(target_os = "ios", allow(unreachable_code))]
         let initial = if self.dialog_open() {
             self.dialog_edit_value()
