@@ -11,7 +11,7 @@ controls, signs in with a Microsoft account and joins Java servers, with rough e
 [Download a test build](https://github.com/Jotspot/horizon-ios/releases) ·
 [iOS guide](docs/ios.md) ·
 [Report an iOS bug](https://github.com/Jotspot/horizon-ios/issues/new) ·
-[Android port](#horizon-android)
+[Android port](docs/android.md)
 
 ## iOS status
 
@@ -114,10 +114,18 @@ before CI. iOS code sits behind `#[cfg(target_os = "ios")]`, or
 desktop and Android builds are unchanged. Never commit Minecraft's files: the app only reads
 resources the player copies in.
 
-# Horizon Android
+## Licence and notices
 
-MocLG's native Android port, which this fork builds on. The sections below describe the Android
-app and are kept from it.
+Original copyright and third-party notices are retained in [LICENSE](LICENSE)
+and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Mojang textures are not
+licensed under Horizon's MIT license. Game files, prepared resources, accounts,
+APKs and signing keys stay outside Git. This project is not affiliated with or
+endorsed by Mojang or Microsoft.
+
+<details>
+<summary>Horizon Android (MocLG's port, which this fork builds on)</summary>
+
+The Android app's own description, kept from its README.
 
 **Android 9+ · Vulkan · Four touch schemes · Sandboxed `.hmod` mods**
 
@@ -195,11 +203,7 @@ No PC resource preparation is needed to install and play on the phone.
 This branch preserves upstream authorship and history. [Upstream integration](docs/android-upstream.json)
 records reviewed merges. Original deployment workflows remain disabled in this fork.
 
-Original copyright and third-party notices are retained in [LICENSE](LICENSE)
-and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Mojang textures are not
-licensed under Horizon's MIT license. Game files, prepared resources, accounts,
-APKs and signing keys stay outside Git. This project is not affiliated with or
-endorsed by Mojang or Microsoft.
+</details>
 
 <details>
 <summary>Upstream Horizon documentation (desktop)</summary>
