@@ -1,6 +1,12 @@
 //! Horizon: native Rust client for Minecraft Java Edition 26.3 gameplay.
 #![forbid(unsafe_code)]
 mod game;
+/// The iOS platform calls the shared touch glue makes (docs/ios.md).
+#[cfg(target_os = "ios")]
+#[path = "ios/platform.rs"]
+mod platform;
+#[cfg(target_os = "ios")]
+pub(crate) use platform::{keyboard_mouse_input, touch_input, touch_visible};
 
 use horizon_client::{crash, logging};
 

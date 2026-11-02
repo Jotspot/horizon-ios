@@ -1618,7 +1618,7 @@ impl Game<'_> {
         )
     }
 
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub(super) fn touch_mining_progress(&self) -> f32 {
         self.remote
             .as_ref()

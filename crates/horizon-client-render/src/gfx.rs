@@ -1441,7 +1441,7 @@ async fn open_backend(
     // stand-in neither clamps nor drops NaN. Subgroups: shader packs' compute programs
     // (`MC_GL_KHR_shader_subgroup_*`); storage buffers in vertex shaders, clearing and
     // atomics on images: their buffers and images.
-    let mobile = cfg!(target_os = "android");
+    let mobile = cfg!(any(target_os = "android", target_os = "ios"));
     let compatibility = crate::android_runtime::compatibility();
     let features = timing::GpuTimer::features(&adapter)
         | if compatibility {
@@ -1483,7 +1483,7 @@ async fn open_backend(
         // Mobile drivers can spend hundreds of milliseconds reserving a new
         // 128-256 MiB pool block. This changes allocation granularity, not
         // resource limits, shader features, texture quality or geometry.
-        memory_hints: if cfg!(target_os = "android") {
+        memory_hints: if cfg!(any(target_os = "android", target_os = "ios")) {
             wgpu::MemoryHints::MemoryUsage
         } else {
             wgpu::MemoryHints::Performance
@@ -3673,7 +3673,7 @@ impl Renderer {
     }
     /// Android destroys the native window when backgrounded. Its surface may
     /// be reused for an in-process renderer handoff, but never after suspension.
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub fn suspend_surface(&mut self) {
         self.suspended = true;
         self.surface = None;
@@ -3696,7 +3696,7 @@ impl Renderer {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
         self.surface = None;
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         let spare = {
             drop(spare);
             None
