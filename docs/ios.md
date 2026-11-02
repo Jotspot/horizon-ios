@@ -15,7 +15,7 @@ builds must not change behaviour.
 | --- | --- |
 | Title screen, single player on the server thread, Java multiplayer (direct connect) | **On-device resource preparation.** `horizon-prepare` runs Java exporters, and iOS has no JVM and does not allow JIT. The player copies in resources prepared on a computer |
 | Touch controls (`touch.rs`, `touch_ui.rs`), the on-screen keyboard (`osk.rs`) | **Code mods.** The `mods` feature (wasmtime + cranelift) generates machine code at run time, which iOS does not allow. Content mods (`.hmod` without code) still load |
-| MFi / Xbox / DualSense controllers through Apple's GameController framework | Microsoft sign-in, the launcher UI, resource-pack downloads, LAN discovery (multicast needs an entitlement that free signing lacks) |
+| MFi / Xbox / DualSense controllers through Apple's GameController framework | The launcher UI, resource-pack downloads, LAN discovery (multicast needs an entitlement that free signing lacks) |
 | Sound through cpal (CoreAudio) | App Store distribution; TestFlight |
 
 ## App shell: winit's iOS backend
@@ -158,6 +158,27 @@ reader:
   then come from the shared code.
 - This covers Xbox, PlayStation (DualShock 4, DualSense), MFi and Switch Pro controllers paired over
   Bluetooth. Rumble (`GCDeviceHaptics`) can come later.
+
+## Microsoft account
+
+Online-mode servers need a signed-in account. On desktop the launcher signs in and hands the game a
+session file; Android's own launcher does the same with the shared code. The iOS app has no
+launcher, so the game signs in itself (`game/ios_account.rs`):
+
+- **Account** in the touch UI's top bar on menu screens opens a panel
+  (`ios/account_panel.rs`, drawn like the touch buttons).
+- **Sign in** runs the device-code flow of `launcher/src/account.rs` (included by path, as
+  `android_main.rs` includes it): Horizon copies the code, opens the verification page with it filled
+  in (`otc`) through `UIApplication openURL`, and polls until the player has allowed access.
+- The account list goes to `Library/Application Support/horizon-launcher/accounts.json` (no token);
+  the refresh and Minecraft tokens go to the Keychain through the `keyring` crate
+  (`ios/secure_store.rs`).
+- At start, and after a sign-in, a worker renews the tokens when needed (`account::fresh`), writes
+  the game's one-time session file, reads it back as an `AuthSession` and makes it current
+  (`auth::set_current`, replaceable on iOS as on Android). Joins read it at connect time.
+- **Sign out** removes the account and its Keychain item and clears the session.
+- The client ID is Android's public one (`00000000441cc96b`) unless `HORIZON_MSA_CLIENT_ID` is set
+  at build time; it is not a registration of Horizon's own.
 
 ## Data directory
 

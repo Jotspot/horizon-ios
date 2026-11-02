@@ -10,7 +10,7 @@ horizon-client-input = { path = "../horizon-client-input" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 objc2 = "0.6"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSNotification", "NSOperation", "NSString", "NSDictionary", "NSValue", "NSGeometry", "block2"] }
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSNotification", "NSOperation", "NSString", "NSDictionary", "NSValue", "NSGeometry", "NSURL", "block2"] }
 block2 = "0.6"
 objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFCGTypes", "objc2"] }
 objc2-game-controller = { version = "0.3", default-features = false, features = ["std", "GCController", "GCExtendedGamepad", "GCPhysicalInputProfile", "GCControllerElement", "GCControllerButtonInput", "GCControllerAxisInput", "GCControllerDirectionPad", "GCDevice"] }

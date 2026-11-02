@@ -8,6 +8,38 @@ mod platform;
 #[cfg(target_os = "ios")]
 pub(crate) use platform::{keyboard_mouse_input, touch_input, touch_visible};
 
+// Microsoft sign-in on iOS: the desktop launcher's account code, as Android includes it
+// (android_main.rs). These files are formatted in the launcher's own workspace.
+#[cfg(target_os = "ios")]
+#[rustfmt::skip]
+#[allow(dead_code)]
+#[path = "../../../launcher/src/account.rs"]
+mod account;
+#[cfg(target_os = "ios")]
+#[rustfmt::skip]
+#[allow(dead_code)]
+#[path = "../../../launcher/src/proxy.rs"]
+mod proxy;
+#[cfg(target_os = "ios")]
+#[rustfmt::skip]
+#[allow(dead_code)]
+#[path = "../../../launcher/src/skins.rs"]
+mod skins;
+#[cfg(target_os = "ios")]
+#[path = "ios/secure_store.rs"]
+mod secure_store;
+/// What the shared account code needs of the launcher: its version and its data folder, the
+/// app's `Library/Application Support/horizon-launcher` (the account list, never a token).
+#[cfg(target_os = "ios")]
+mod backend {
+    pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+    pub fn data_dir() -> std::path::PathBuf {
+        std::env::var_os("HOME")
+            .map_or_else(std::env::temp_dir, std::path::PathBuf::from)
+            .join("Library/Application Support/horizon-launcher")
+    }
+}
+
 use horizon_client::{crash, logging};
 
 #[global_allocator]

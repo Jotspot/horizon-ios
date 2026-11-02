@@ -122,3 +122,54 @@ pub mod keyboard {
         }
     }
 }
+
+/// Safari and the clipboard, for the Microsoft sign-in's link and code. Main thread only.
+#[cfg(target_os = "ios")]
+pub mod links {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_foundation::{NSDictionary, NSString, NSURL};
+
+    fn class(name: &std::ffi::CStr) -> Option<&'static AnyClass> {
+        AnyClass::get(name)
+    }
+
+    /// Opens `url` in its app (Safari for a web page). False when it could not be asked.
+    pub fn open_url(url: &str) -> bool {
+        let Some(url) = NSURL::URLWithString(&NSString::from_str(url)) else {
+            return false;
+        };
+        let Some(application) = class(c"UIApplication") else {
+            return false;
+        };
+        let options = NSDictionary::<AnyObject, AnyObject>::new();
+        // Safety: UIApplication's shared instance and `openURL:options:completionHandler:` on the
+        // main thread, with a valid URL, an empty options dictionary and no completion block.
+        unsafe {
+            let shared: *mut AnyObject = msg_send![application, sharedApplication];
+            if shared.is_null() {
+                return false;
+            }
+            let none: *mut AnyObject = std::ptr::null_mut();
+            let _: () =
+                msg_send![shared, openURL: &*url, options: &*options, completionHandler: none];
+        }
+        true
+    }
+
+    /// Puts `text` on the system clipboard.
+    pub fn copy_text(text: &str) -> bool {
+        let Some(pasteboard) = class(c"UIPasteboard") else {
+            return false;
+        };
+        // Safety: UIPasteboard's general pasteboard and `setString:` with a valid string.
+        unsafe {
+            let general: *mut AnyObject = msg_send![pasteboard, generalPasteboard];
+            if general.is_null() {
+                return false;
+            }
+            let _: () = msg_send![general, setString: &*NSString::from_str(text)];
+        }
+        true
+    }
+}

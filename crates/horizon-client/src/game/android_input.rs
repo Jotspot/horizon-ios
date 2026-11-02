@@ -359,6 +359,8 @@ impl Game<'_> {
                         self.pad.touch_ui.virtual_mouse ^= true;
                     }
                     Action::More => self.pad.touch_ui.expanded = !self.pad.touch_ui.expanded,
+                    #[cfg(target_os = "ios")]
+                    Action::Account => self.ios_account_open(),
                     Action::Keyboard => {
                         if crate::platform::active() {
                             crate::platform::hide();

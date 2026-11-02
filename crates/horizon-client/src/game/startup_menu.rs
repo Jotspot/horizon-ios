@@ -1243,6 +1243,9 @@ impl Loading {
                             }
                         }
                         Action::More => self.menu.touch.expanded = !self.menu.touch.expanded,
+                        // The Account button shows once the game has loaded.
+                        #[cfg(target_os = "ios")]
+                        Action::Account => {}
                         Action::Keyboard => {
                             if crate::platform::active() {
                                 crate::platform::hide();

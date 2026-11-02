@@ -143,6 +143,8 @@ mod ime;
 mod initial_spawn;
 mod integrated;
 mod interactions;
+#[cfg(target_os = "ios")]
+mod ios_account;
 mod item_draw;
 mod item_particles;
 mod item_use;
@@ -14975,6 +14977,8 @@ impl Game<'_> {
                     .draw(&mut hud, &self.gui.atlas, self.pad_in_menu());
             }
         }
+        #[cfg(target_os = "ios")]
+        self.ios_account_draw(&mut hud);
         self.flush_ime(&mut hud);
         let title = self.shows_panorama();
         let (yaw, pitch) = if title {
@@ -16183,8 +16187,12 @@ impl Game<'_> {
         // iOS: a touch shows the touch controls. Every key event here comes from the on-screen
         // keyboard (winit has no iOS hardware keyboard), so typing does not hide them.
         #[cfg(target_os = "ios")]
-        if let WindowEvent::Touch(_) = &event {
+        if let WindowEvent::Touch(touch) = &event {
             crate::touch_input(true);
+            // The Microsoft account panel, while open, takes every touch.
+            if self.ios_account_touch(touch) {
+                return;
+            }
         }
         #[cfg(target_os = "android")]
         if !self.pad_in_menu()
@@ -17854,6 +17862,8 @@ impl Game<'_> {
         self.android_apply_display_scale();
         #[cfg(any(target_os = "android", target_os = "ios"))]
         self.android_poll_keyboard();
+        #[cfg(target_os = "ios")]
+        self.ios_account_frame();
         #[cfg(target_os = "android")]
         if let Some(renderer) = &mut self.renderer {
             renderer.set_detailed_gpu_timing(

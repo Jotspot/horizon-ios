@@ -83,6 +83,13 @@ arboard = { version = "3.6.1", default-features = false, features = ["wayland-da
 # iOS: controllers through GameController, behind safe calls (docs/ios.md).
 [target.'cfg(target_os = "ios")'.dependencies]
 horizon-ios-sys = { path = "../horizon-ios-sys" }
+# Microsoft sign-in through the launcher's shared account code (launcher/src/account.rs), as on
+# Android: its proxy rules, skins and session-file names, and the Keychain for the tokens.
+horizon-port-pack = { path = "../horizon-port-pack" }
+image = { version = "0.25", default-features = false, features = ["png"] }
+getrandom = "0.3"
+keyring = { version = "3", features = ["apple-native"] }
+ureq = { version = "2", default-features = false, features = ["json", "tls"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
 rustix = { version = "1", default-features = false, features = ["std", "fs"] }

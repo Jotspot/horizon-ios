@@ -14,7 +14,7 @@
 //! the same hosts have to be left alone on both sides. This module adds what is the launcher's
 //! own — the setting in `settings.json`, kept in memory so a request doesn't read the file — and
 //! hands the address to the parts that build their agents.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::backend::Settings;
 use std::sync::Mutex;
 
@@ -101,7 +101,7 @@ fn setting() -> Option<String> {
 }
 
 /// The launcher's setting as it is written down, or None when there is none.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn written() -> Option<String> {
     Settings::load()
         .proxy
@@ -150,6 +150,12 @@ mod tests {
         let why = refuse("http://user:secret@").unwrap();
         assert!(!why.contains("secret"), "{why}");
     }
+}
+
+/// The iOS app has no proxy setting: the environment's, if any, applies.
+#[cfg(target_os = "ios")]
+fn written() -> Option<String> {
+    None
 }
 
 #[cfg(target_os = "android")]
