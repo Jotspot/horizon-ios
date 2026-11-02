@@ -292,7 +292,7 @@ IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios
 - The workflow uploads `Horizon.ipa` as an artifact on every run. Every successful run that is not
   a pull request's is also published as an `ios-build-<run number>` prerelease whose notes list the
   commits since the previous one (`tools/ios_release.sh`); pushes to `ios` also refresh the rolling
-  `ios-latest` prerelease. `ios-backfill-releases.yml` publishes earlier runs the same way.
+  `ios-latest` prerelease. Running `ios.yml` by hand with `backfill` set to earlier run IDs publishes those runs the same way.
 - Locally, on Linux: `tools/ios_check.sh` runs `cargo check --target aarch64-apple-ios` with the
   same features. There is no iOS SDK on Linux, so it uses a stand-in C compiler that writes empty
   objects for the C build scripts (ring, mimalloc). Those objects are never linked. It catches Rust
