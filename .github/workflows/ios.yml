@@ -1,0 +1,80 @@
+# The iOS build (docs/ios.md): horizon-client for aarch64-apple-ios, packed into an unsigned
+# Horizon.ipa. Every run uploads it as an artifact; pushes to `ios` also refresh the rolling
+# `ios-latest` prerelease.
+name: iOS build
+on:
+  push:
+    branches: [ios]
+  pull_request:
+    branches: [android]
+    paths:
+      - ".github/workflows/ios.yml"
+      - "packaging/ios/**"
+      - "tools/ios_package.sh"
+      - "crates/**"
+      - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 120
+    env:
+      HORIZON_TELEMETRY_URL: "off"
+      IPHONEOS_DEPLOYMENT_TARGET: "16.0"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Rust target
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add aarch64-apple-ios
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: ios-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: ios-${{ runner.os }}-
+      - name: Build
+        # No `controllers` (gilrs and HID have no iOS backend) and no `mods` (wasm JIT).
+        run: >
+          cargo build --release --target aarch64-apple-ios
+          -p horizon-client --bin horizon-client
+          --no-default-features --features audio
+      - name: Package
+        run: tools/ios_package.sh target/aarch64-apple-ios/release/horizon-client .local/ios
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Horizon-ipa
+          path: .local/ios/Horizon.ipa
+          if-no-files-found: error
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/ios'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Horizon-ipa
+      - name: Refresh the ios-latest prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete ios-latest --cleanup-tag --yes || true
+          gh release create ios-latest Horizon.ipa --prerelease --target "$GITHUB_SHA" \
+            --title "iOS test build (${GITHUB_SHA::7})" \
+            --notes "Unsigned test build from the \`ios\` branch at $GITHUB_SHA. Install it with SideStore or AltStore; see docs/ios.md."
