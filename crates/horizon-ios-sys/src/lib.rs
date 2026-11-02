@@ -122,3 +122,97 @@ pub mod keyboard {
         }
     }
 }
+
+/// Safari and the clipboard, for the Microsoft sign-in's link and code. Main thread only.
+#[cfg(target_os = "ios")]
+pub mod links {
+    use objc2::msg_send;
+    use objc2::runtime::{AnyClass, AnyObject};
+    use objc2_foundation::{NSDictionary, NSString, NSURL};
+
+    fn class(name: &std::ffi::CStr) -> Option<&'static AnyClass> {
+        AnyClass::get(name)
+    }
+
+    /// Opens `url` in its app (Safari for a web page). False when it could not be asked.
+    pub fn open_url(url: &str) -> bool {
+        let Some(url) = NSURL::URLWithString(&NSString::from_str(url)) else {
+            return false;
+        };
+        let Some(application) = class(c"UIApplication") else {
+            return false;
+        };
+        let options = NSDictionary::<AnyObject, AnyObject>::new();
+        // Safety: UIApplication's shared instance and `openURL:options:completionHandler:` on the
+        // main thread, with a valid URL, an empty options dictionary and no completion block.
+        unsafe {
+            let shared: *mut AnyObject = msg_send![application, sharedApplication];
+            if shared.is_null() {
+                return false;
+            }
+            let none: *mut AnyObject = std::ptr::null_mut();
+            let _: () =
+                msg_send![shared, openURL: &*url, options: &*options, completionHandler: none];
+        }
+        true
+    }
+
+    /// Puts `text` on the system clipboard.
+    pub fn copy_text(text: &str) -> bool {
+        let Some(pasteboard) = class(c"UIPasteboard") else {
+            return false;
+        };
+        // Safety: UIPasteboard's general pasteboard and `setString:` with a valid string.
+        unsafe {
+            let general: *mut AnyObject = msg_send![pasteboard, generalPasteboard];
+            if general.is_null() {
+                return false;
+            }
+            let _: () = msg_send![general, setString: &*NSString::from_str(text)];
+        }
+        true
+    }
+}
+
+/// SRV records through the system resolver: an iOS app can't read `/etc/resolv.conf`, which
+/// Horizon's own DNS client asks for its name servers, so `hypixel.net`-style addresses (an SRV
+/// record pointing at the game server) went to the web server and timed out. The system's answer
+/// follows the active network, VPN and private DNS, like Android's (`android/dns.rs`).
+#[cfg(target_os = "ios")]
+pub mod dns {
+    use std::ffi::{CString, c_char, c_int};
+
+    #[link(name = "resolv")]
+    unsafe extern "C" {
+        /// `res_query` of `<resolv.h>`, which names it `res_9_query` on Apple platforms.
+        fn res_9_query(
+            name: *const c_char,
+            class: c_int,
+            kind: c_int,
+            answer: *mut u8,
+            length: c_int,
+        ) -> c_int;
+    }
+
+    /// The complete DNS reply to an SRV question for `name`, for horizon-protocol to parse.
+    pub fn query_srv(name: &str) -> Option<Vec<u8>> {
+        const CLASS_IN: c_int = 1;
+        const TYPE_SRV: c_int = 33;
+        let name = CString::new(name).ok()?;
+        let mut answer = vec![0u8; 8192];
+        // Safety: a NUL-terminated name and a buffer of the length given; the resolver writes at
+        // most that many bytes and returns how many, or -1.
+        let length = unsafe {
+            res_9_query(
+                name.as_ptr(),
+                CLASS_IN,
+                TYPE_SRV,
+                answer.as_mut_ptr(),
+                answer.len() as c_int,
+            )
+        };
+        let length = usize::try_from(length).ok().filter(|n| *n > 0)?;
+        answer.truncate(length.min(answer.len()));
+        Some(answer)
+    }
+}

@@ -24,6 +24,12 @@ pub struct TouchUi {
     /// GUI pixels kept free at the left and right edges (iOS: the safe area, so the buttons
     /// clear the rounded corners and the sensor housing). Drawing and hit tests both use it.
     pub inset: [f32; 2],
+    /// iOS: show the Account button beside Mouse and Back on menu screens.
+    #[cfg(target_os = "ios")]
+    pub account_button: bool,
+    /// iOS: the on-screen keyboard is up; a Hide keyboard button shows in the top bar.
+    #[cfg(target_os = "ios")]
+    pub keyboard_up: bool,
 }
 struct RelativeTouch {
     id: u64,
@@ -47,6 +53,12 @@ pub enum Action {
     VirtualMouse,
     MouseButton(bool),
     More,
+    /// iOS: the Microsoft account panel (`ios/account_panel.rs`).
+    #[cfg(target_os = "ios")]
+    Account,
+    /// iOS: put the on-screen keyboard away.
+    #[cfg(target_os = "ios")]
+    HideKeyboard,
 }
 
 const KEYS: [(&str, KeyCode); 28] = [
@@ -301,6 +313,19 @@ impl TouchUi {
         if menu && (3.0..23.0).contains(&p[1]) && (w - 108.0..w - 56.0).contains(&p[0]) {
             return Some(Action::VirtualMouse);
         }
+        #[cfg(target_os = "ios")]
+        if self.keyboard_up && (3.0..23.0).contains(&p[1]) && (w - 260.0..w - 171.0).contains(&p[0])
+        {
+            return Some(Action::HideKeyboard);
+        }
+        #[cfg(target_os = "ios")]
+        if menu
+            && self.account_button
+            && (3.0..23.0).contains(&p[1])
+            && (w - 168.0..w - 111.0).contains(&p[0])
+        {
+            return Some(Action::Account);
+        }
         if (3.0..23.0).contains(&p[1]) {
             if menu && (w - 53.0..w - 3.0).contains(&p[0]) {
                 return Some(Action::Key(KeyCode::Escape));
@@ -382,6 +407,14 @@ impl TouchUi {
         if menu {
             button(b, a, "Back", ox + w - 53.0, 3.0, 50.0);
         }
+        #[cfg(target_os = "ios")]
+        if menu && self.account_button {
+            button(b, a, "Account", ox + w - 168.0, 3.0, 57.0);
+        }
+        #[cfg(target_os = "ios")]
+        if self.keyboard_up {
+            button(b, a, "Hide keyboard", ox + w - 260.0, 3.0, 89.0);
+        }
         if self.expanded {
             button(
                 b,
@@ -428,7 +461,7 @@ impl TouchUi {
         }
     }
 }
-fn button(b: &mut HudBatch, a: &HudAtlas, label: &str, x: f32, y: f32, w: f32) {
+pub(crate) fn button(b: &mut HudBatch, a: &HudAtlas, label: &str, x: f32, y: f32, w: f32) {
     if !crate::touch::theme_button(b, a, "button", [x, y, w, 20.0], false, u32::MAX, true) {
         b.fill(a, x, y, w, 20.0, rgba(16, 18, 24, 180));
     }

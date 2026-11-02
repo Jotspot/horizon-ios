@@ -23,10 +23,10 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 /// The keychain service name every secret is stored under.
 pub const SERVICE: &str = "dev.playhorizon.launcher";
 const SCOPE: &str = "XboxLive.signin offline_access";
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 pub const NOT_CONFIGURED: &str = "Microsoft sign-in is coming soon. Until then the game plays offline: single player, \
      LAN and servers in offline mode work.";
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub const NOT_CONFIGURED: &str = "This build of the launcher has no Microsoft sign-in (HORIZON_MSA_CLIENT_ID), so it can't start the game.";
 /// What every Play says while no account in the launcher owns the game.
 pub const NEEDS_OWNER: &str =
@@ -764,7 +764,7 @@ fn check_with(
 
 /// Android's session adapter preserves a still-valid token without a network request.
 /// Renewal uses the same ownership/profile checks as the desktop launcher.
-#[cfg(any(target_os = "android", test))]
+#[cfg(any(target_os = "android", target_os = "ios", test))]
 pub fn fresh(
     ep: &Endpoints,
     client_id: &str,
@@ -1207,6 +1207,9 @@ pub fn store() -> &'static dyn SecretStore {
         .get_or_init(|| {
             #[cfg(all(target_os = "android", not(test)))]
             return Box::new(crate::secure_store::AndroidStore);
+            // iOS: the app's own Keychain items.
+            #[cfg(all(target_os = "ios", not(test)))]
+            return Box::new(crate::secure_store::IosStore);
             // Unit tests never reach the player's keychain.
             #[cfg(all(
                 not(test),
@@ -1227,7 +1230,7 @@ pub fn store() -> &'static dyn SecretStore {
                 };
                 let _ = NO_KEYCHAIN_WHY.set(why);
             }
-            #[cfg(any(not(target_os = "android"), test))]
+            #[cfg(any(not(any(target_os = "android", target_os = "ios")), test))]
             {
                 Box::<MemoryStore>::default()
             }
@@ -1833,7 +1836,7 @@ fn session_file(game_home: &Path, pass: Launch) -> (Option<PathBuf>, Option<Stri
 /// ([`launch`]): the selected account when it owns the game, else one that does. With no answer
 /// from the services, an account that owned it plays with its last token. Mojang's game takes the
 /// token on its command line, as Mojang's launcher gives it; that command is never logged.
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn java_player() -> Result<crate::java_launch::Player, String> {
     let mut accounts = Accounts::load();
     let player = java_player_with(
@@ -1846,7 +1849,7 @@ pub fn java_player() -> Result<crate::java_launch::Player, String> {
     player
 }
 
-#[cfg(not(target_os = "android"))]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 fn java_player_with(
     ep: &Endpoints,
     client_id: Option<&str>,

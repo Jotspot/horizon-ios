@@ -359,6 +359,10 @@ impl Game<'_> {
                         self.pad.touch_ui.virtual_mouse ^= true;
                     }
                     Action::More => self.pad.touch_ui.expanded = !self.pad.touch_ui.expanded,
+                    #[cfg(target_os = "ios")]
+                    Action::Account => self.ios_account_open(),
+                    #[cfg(target_os = "ios")]
+                    Action::HideKeyboard => crate::platform::hide(),
                     Action::Keyboard => {
                         if crate::platform::active() {
                             crate::platform::hide();
@@ -647,6 +651,10 @@ impl Game<'_> {
         {
             Gesture::Tap => {
                 let field = crate::platform::field_at(p);
+                // iOS: the chat box counts as a field (it registers no widget target), and a tap
+                // anywhere else puts the keyboard away.
+                #[cfg(target_os = "ios")]
+                let field = field || (self.screen == Screen::Chat && self.ios_chat_input_at(p));
                 for state in [ElementState::Pressed, ElementState::Released] {
                     self.handle_window_event(
                         events,
@@ -660,6 +668,9 @@ impl Game<'_> {
                 }
                 if field || self.sign_edit.is_some() {
                     self.android_show_keyboard();
+                } else {
+                    #[cfg(target_os = "ios")]
+                    crate::platform::hide();
                 }
             }
             Gesture::Scroll(y) if self.screen == Screen::Options => {

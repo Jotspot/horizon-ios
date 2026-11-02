@@ -15,7 +15,7 @@ builds must not change behaviour.
 | --- | --- |
 | Title screen, single player on the server thread, Java multiplayer (direct connect) | **On-device resource preparation.** `horizon-prepare` runs Java exporters, and iOS has no JVM and does not allow JIT. The player copies in resources prepared on a computer |
 | Touch controls (`touch.rs`, `touch_ui.rs`), the on-screen keyboard (`osk.rs`) | **Code mods.** The `mods` feature (wasmtime + cranelift) generates machine code at run time, which iOS does not allow. Content mods (`.hmod` without code) still load |
-| MFi / Xbox / DualSense controllers through Apple's GameController framework | Microsoft sign-in, the launcher UI, resource-pack downloads, LAN discovery (multicast needs an entitlement that free signing lacks) |
+| MFi / Xbox / DualSense controllers through Apple's GameController framework | The launcher UI, resource-pack downloads, LAN discovery (multicast needs an entitlement that free signing lacks) |
 | Sound through cpal (CoreAudio) | App Store distribution; TestFlight |
 
 ## App shell: winit's iOS backend
@@ -159,6 +159,27 @@ reader:
 - This covers Xbox, PlayStation (DualShock 4, DualSense), MFi and Switch Pro controllers paired over
   Bluetooth. Rumble (`GCDeviceHaptics`) can come later.
 
+## Microsoft account
+
+Online-mode servers need a signed-in account. On desktop the launcher signs in and hands the game a
+session file; Android's own launcher does the same with the shared code. The iOS app has no
+launcher, so the game signs in itself (`game/ios_account.rs`):
+
+- **Account** in the touch UI's top bar on menu screens opens a panel
+  (`ios/account_panel.rs`, drawn like the touch buttons).
+- **Sign in** runs the device-code flow of `launcher/src/account.rs` (included by path, as
+  `android_main.rs` includes it): Horizon copies the code, opens the verification page with it filled
+  in (`otc`) through `UIApplication openURL`, and polls until the player has allowed access.
+- The account list goes to `Library/Application Support/horizon-launcher/accounts.json` (no token);
+  the refresh and Minecraft tokens go to the Keychain through the `keyring` crate
+  (`ios/secure_store.rs`).
+- At start, and after a sign-in, a worker renews the tokens when needed (`account::fresh`), writes
+  the game's one-time session file, reads it back as an `AuthSession` and makes it current
+  (`auth::set_current`, replaceable on iOS as on Android). Joins read it at connect time.
+- **Sign out** removes the account and its Keychain item and clears the session.
+- The client ID is Android's public one (`00000000441cc96b`) unless `HORIZON_MSA_CLIENT_ID` is set
+  at build time; it is not a registration of Horizon's own.
+
 ## Data directory
 
 The app's sandbox `Documents/` folder is visible in the Files app ("On My iPhone → Horizon") and in
@@ -268,8 +289,10 @@ IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios
   empty `UILaunchScreen` dictionary (without it iOS runs the app letterboxed at a legacy screen size),
   the two file-sharing keys, and `NSLocalNetworkUsageDescription` for LAN/direct connect to local
   servers.
-- The workflow uploads `Horizon.ipa` as an artifact on every run. On pushes to `ios` it also updates
-  a rolling `ios-latest` prerelease.
+- The workflow uploads `Horizon.ipa` as an artifact on every run. Every successful run that is not
+  a pull request's is also published as an `ios-build-<run number>` prerelease whose notes list the
+  commits since the previous one (`tools/ios_release.sh`); pushes to `ios` also refresh the rolling
+  `ios-latest` prerelease. Running `ios.yml` by hand with `backfill` set to earlier run IDs publishes those runs the same way.
 - Locally, on Linux: `tools/ios_check.sh` runs `cargo check --target aarch64-apple-ios` with the
   same features. There is no iOS SDK on Linux, so it uses a stand-in C compiler that writes empty
   objects for the C build scripts (ring, mimalloc). Those objects are never linked. It catches Rust
