@@ -27,6 +27,9 @@ pub struct TouchUi {
     /// iOS: show the Account button beside Mouse and Back on menu screens.
     #[cfg(target_os = "ios")]
     pub account_button: bool,
+    /// iOS: the on-screen keyboard is up; a Hide keyboard button shows in the top bar.
+    #[cfg(target_os = "ios")]
+    pub keyboard_up: bool,
 }
 struct RelativeTouch {
     id: u64,
@@ -53,6 +56,9 @@ pub enum Action {
     /// iOS: the Microsoft account panel (`ios/account_panel.rs`).
     #[cfg(target_os = "ios")]
     Account,
+    /// iOS: put the on-screen keyboard away.
+    #[cfg(target_os = "ios")]
+    HideKeyboard,
 }
 
 const KEYS: [(&str, KeyCode); 28] = [
@@ -308,6 +314,11 @@ impl TouchUi {
             return Some(Action::VirtualMouse);
         }
         #[cfg(target_os = "ios")]
+        if self.keyboard_up && (3.0..23.0).contains(&p[1]) && (w - 260.0..w - 171.0).contains(&p[0])
+        {
+            return Some(Action::HideKeyboard);
+        }
+        #[cfg(target_os = "ios")]
         if menu
             && self.account_button
             && (3.0..23.0).contains(&p[1])
@@ -399,6 +410,10 @@ impl TouchUi {
         #[cfg(target_os = "ios")]
         if menu && self.account_button {
             button(b, a, "Account", ox + w - 168.0, 3.0, 57.0);
+        }
+        #[cfg(target_os = "ios")]
+        if self.keyboard_up {
+            button(b, a, "Hide keyboard", ox + w - 260.0, 3.0, 89.0);
         }
         if self.expanded {
             button(

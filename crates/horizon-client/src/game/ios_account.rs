@@ -73,6 +73,7 @@ impl Game<'_> {
     /// Once a frame: the Account button, the sign-in's progress and the session to use.
     pub(super) fn ios_account_frame(&mut self) {
         self.pad.touch_ui.account_button = true;
+        self.pad.touch_ui.keyboard_up = self.ime_allowed;
         STATE.with(|state| {
             let mut state = state.borrow_mut();
             if !state.restored {

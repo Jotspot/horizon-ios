@@ -8,7 +8,7 @@ controls, signs in with a Microsoft account and joins Java servers, with rough e
 
 **iPhone · iOS 16+ · Metal · Touch controls and Bluetooth controllers · Sideloaded with SideStore or AltStore**
 
-[Download the test IPA](https://github.com/Jotspot/horizon-ios/releases/tag/ios-latest) ·
+[Download a test build](https://github.com/Jotspot/horizon-ios/releases) ·
 [iOS guide](docs/ios.md) ·
 [Report an iOS bug](https://github.com/Jotspot/horizon-ios/issues/new) ·
 [Android port](#horizon-android)
@@ -23,9 +23,9 @@ controls, signs in with a Microsoft account and joins Java servers, with rough e
 | Xbox, PlayStation and MFi controllers (GameController) | Written, waiting for the first device test |
 | Safe area, landscape, background and foreground | Working on an iPhone 14 |
 | Single-player world, saves, options and logs in the Files app | Working on an iPhone 14 |
-| iPhone keyboard in text fields and chat | Working on an iPhone 14; chat still needs layout fixes around the notch |
+| iPhone keyboard in text fields and chat | Working on an iPhone 14; chat above the keyboard and clear of the notch fixed, waiting for a device test |
 | Microsoft sign-in | Working on an iPhone 14 ([details](#multiplayer-on-ios)) |
-| Joining Java servers | Partly: some servers connect, large networks such as Hypixel and CubeCraft time out (being investigated) |
+| Joining Java servers | Working on an iPhone 14 for direct addresses; addresses with an SRV record (`hypixel.net`, `cubecraft.net`) fixed, waiting for a device test |
 | Preparing resources on the phone | Not on iOS: it needs a JVM. Copy prepared resources in |
 | Code mods (`.hmod` with code) | Not on iOS: they need a JIT, which iOS does not allow. Content mods load |
 | iPad, portrait, system clipboard, narrator, rumble | Not yet |
@@ -36,7 +36,7 @@ port works and what is left.
 
 ## On iPhone
 
-iPhone 14 · iOS 27 · render distance 6
+iPhone 14 · iOS 27 · render distance 17
 
 | **Title screen** | **Touch controls** |
 | --- | --- |
@@ -79,8 +79,8 @@ use its own registration through `HORIZON_MSA_CLIENT_ID`.
 
 1. Install [SideStore](https://sidestore.io) or [AltStore](https://altstore.io) on the iPhone and
    sign in with your Apple ID.
-2. Download `Horizon.ipa` from the
-   [`ios-latest` prerelease](https://github.com/Jotspot/horizon-ios/releases/tag/ios-latest), then
+2. Download `Horizon.ipa` from the newest `ios-build-N` release on the
+   [releases page](https://github.com/Jotspot/horizon-ios/releases) (each lists what changed), then
    open it in SideStore or AltStore (**My Apps → +**). The `.ipa` is unsigned; the app signs it with
    your Apple ID when it installs.
 3. On a computer, let the desktop Horizon launcher prepare the game from your own copy of

@@ -128,6 +128,8 @@ fn ios_start() {
     }
     logging::set_game_home(game);
     horizon_ios_sys::keyboard::observe();
+    // Servers' SRV records through the system resolver (resolv.conf is not readable on iOS).
+    horizon_protocol::install_system_srv_lookup(horizon_ios_sys::dns::query_srv);
 }
 
 /// The JVM raises its open-file limit to the hard limit as it starts

@@ -84,8 +84,20 @@ impl AccountPanel {
             };
             b.text(a, line, x + PAD, y + PAD + i as f32 * LINE, color, true);
         }
-        for (button, [bx, by, bw, _]) in self.buttons.iter().zip(&layout.buttons) {
-            crate::touch_ui::button(b, a, button.label(), *bx, *by, *bw);
+        for (button, &[bx, by, bw, bh]) in self.buttons.iter().zip(&layout.buttons) {
+            // A light outline around a raised face, readable on the panel's dark background.
+            b.fill(a, bx, by, bw, bh, rgba(150, 152, 160, 255));
+            b.fill(a, bx + 1.0, by + 1.0, bw - 2.0, bh - 2.0, rgba(62, 66, 78, 255));
+            let label = button.label();
+            let tw = HudBatch::text_width(a, label);
+            b.text(
+                a,
+                label,
+                (bx + (bw - tw) / 2.0).round(),
+                by + 6.0,
+                rgba(245, 245, 245, 255),
+                true,
+            );
         }
     }
 

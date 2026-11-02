@@ -8289,7 +8289,12 @@ impl Game<'_> {
             let tw = HudBatch::text_width(atlas, text);
             batch.text(atlas, text, (w - tw) / 2.0, h - 59.0, u32::MAX, true);
         }
+        // iOS: the chat lines clear the notch, and rise above the keyboard with the chat box.
+        #[cfg(target_os = "ios")]
+        let area = self.ios_text_area(&mut batch);
         self.draw_chat(&mut batch);
+        #[cfg(target_os = "ios")]
+        area.end(&mut batch);
         self.draw_tab_list(&mut batch);
         // Screen.extractBlurredBackground blurs the world and HUD, while the
         // screen's background, widgets, toasts and debug overlay stay sharp.
@@ -8339,22 +8344,12 @@ impl Game<'_> {
                 self.draw_creative(&mut batch);
             }
             Screen::Chat => {
-                // iOS: the chat box sits above the on-screen keyboard, as Android's resized
-                // window puts it: the screen is laid out over the part the keyboard leaves.
+                // iOS: inside the safe area and above the on-screen keyboard.
                 #[cfg(target_os = "ios")]
-                let full = batch.height;
-                #[cfg(target_os = "ios")]
-                if let Some(window) = &self.window {
-                    let scale = window.scale_factor();
-                    let view = f64::from(window.inner_size().height) / scale;
-                    let covered = horizon_ios_sys::keyboard::covered(view) * scale;
-                    batch.height = (batch.height - covered as f32 / batch.scale).max(1.0);
-                }
+                let area = self.ios_text_area(&mut batch);
                 self.draw_chat_screen(&mut batch);
                 #[cfg(target_os = "ios")]
-                {
-                    batch.height = full;
-                }
+                area.end(&mut batch);
             }
             Screen::Mod => self.draw_mod_screen(&mut batch),
             Screen::Playing | Screen::Options | Screen::Win => {}
@@ -16347,7 +16342,9 @@ impl Game<'_> {
                 }
                 return;
             }
-            if !self.pad_in_menu() || inventory_control {
+            // iOS: the connecting screen takes taps as clicks, so its Cancel button answers.
+            let connecting = cfg!(target_os = "ios") && self.remote_loading();
+            if (!self.pad_in_menu() && !connecting) || inventory_control {
                 if !crate::touch_visible() && !self.settings.keypad.enabled {
                     return;
                 }
@@ -20374,6 +20371,65 @@ pub(crate) fn safe_gui_insets(window: Option<&Window>, scale: f32) -> [f32; 2] {
     }
     let _ = (window, scale);
     [0.0; 2]
+}
+
+/// iOS: what the chat is laid out in, set by [`Game::ios_text_area`] and undone by [`end`]:
+/// the screen less the safe area's sides and the part the on-screen keyboard covers.
+///
+/// [`end`]: IosTextArea::end
+#[cfg(target_os = "ios")]
+pub(crate) struct IosTextArea {
+    width: f32,
+    height: f32,
+    left: f32,
+    start: usize,
+}
+#[cfg(target_os = "ios")]
+impl IosTextArea {
+    /// Restores the batch's size and moves what was drawn past the left inset.
+    pub(crate) fn end(self, batch: &mut HudBatch) {
+        for v in &mut batch.vertices[self.start..] {
+            v.pos[0] += self.left;
+        }
+        batch.width = self.width;
+        batch.height = self.height;
+    }
+}
+#[cfg(target_os = "ios")]
+impl Game<'_> {
+    /// Narrows `batch` to the safe area's width and the height above the keyboard, until the
+    /// returned area's `end`: screens laid out in it keep clear of both, as Android's resized
+    /// window and cutout insets keep them.
+    /// Whether `p` (GUI pixels) is on the chat box, the bottom line of the area above the
+    /// keyboard.
+    pub(crate) fn ios_chat_input_at(&self, p: [f32; 2]) -> bool {
+        let Some(mut batch) = self.gui_scale() else {
+            return false;
+        };
+        let full = batch.height;
+        let area = self.ios_text_area(&mut batch);
+        let bottom = batch.height;
+        area.end(&mut batch);
+        p[1] >= bottom - 16.0 && p[1] <= bottom.min(full)
+    }
+    pub(crate) fn ios_text_area(&self, batch: &mut HudBatch) -> IosTextArea {
+        let area = IosTextArea {
+            width: batch.width,
+            height: batch.height,
+            left: 0.0,
+            start: batch.vertices.len(),
+        };
+        let Some(window) = &self.window else {
+            return area;
+        };
+        let [left, right] = safe_gui_insets(Some(window), batch.scale);
+        let scale = window.scale_factor();
+        let view = f64::from(window.inner_size().height) / scale;
+        let covered = horizon_ios_sys::keyboard::covered(view) * scale;
+        batch.width = (batch.width - left - right).max(1.0);
+        batch.height = (batch.height - covered as f32 / batch.scale).max(1.0);
+        IosTextArea { left, ..area }
+    }
 }
 
 /// The last step of a window's attributes: what the platform needs on top of the desktop's.
