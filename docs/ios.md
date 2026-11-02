@@ -1,0 +1,282 @@
+# Horizon on iOS (plan)
+
+Status: **plan, nothing built yet.** This page covers how the iOS port is built, packaged and run.
+It will become the player-facing iOS guide once the app boots. The first target is an iPhone 14
+(A15 Bionic, 6 GB RAM, iOS 16+), sideloaded as an unsigned `.ipa` through SideStore or AltStore.
+
+The port follows the Android one ([android.md](android.md)): the same simulation, renderer and touch
+controls, with a thin platform layer gated behind `#[cfg(target_os = "ios")]`. Desktop and Android
+builds must not change behaviour.
+
+## Scope
+
+| In the first versions | Left out for now (gated off, not deleted) |
+| --- | --- |
+| Title screen, single player on the server thread, Java multiplayer (direct connect) | **On-device resource preparation.** `horizon-prepare` runs Java exporters, and iOS has no JVM and does not allow JIT. The player copies in resources prepared on a computer |
+| Touch controls (`touch.rs`, `touch_ui.rs`), the on-screen keyboard (`osk.rs`) | **Code mods.** The `mods` feature (wasmtime + cranelift) generates machine code at run time, which iOS does not allow. Content mods (`.hmod` without code) still load |
+| MFi / Xbox / DualSense controllers through Apple's GameController framework | Microsoft sign-in, the launcher UI, resource-pack downloads, LAN discovery (multicast needs an entitlement that free signing lacks) |
+| Sound through cpal (CoreAudio) | App Store distribution; TestFlight |
+
+## App shell: winit's iOS backend
+
+**Decision: use winit's UIKit backend** (`third_party/winit/src/platform_impl/ios/`, the patched
+0.30.13 the workspace already uses), not a hand-written `UIApplicationMain` shell.
+
+Why:
+
+- The game already *is* a winit `ApplicationHandler` (`impl ApplicationHandler for App` in `game.rs`).
+  On iOS, `EventLoop::run_app` calls `UIApplicationMain`, creates the `UIWindow` + `UIViewController`
+  + `UIView`, and turns UIKit callbacks into the same `WindowEvent`s the desktop and Android paths
+  handle: `Touch` (id, phase, position in physical pixels, force), `Resized`, `ScaleFactorChanged`,
+  `suspended`/`resumed` and `memory_warning`.
+- Touch already goes through `WindowEvent::Touch` → `horizon_client::touch` on Android. Using winit on
+  iOS reuses that path with no new event translation.
+- `raw-window-handle` gives wgpu a `UiKitWindowHandle` (the `UIView`). wgpu's Metal backend attaches a
+  `CAMetalLayer` to that view's layer, so the renderer needs no iOS-specific code beyond picking Metal.
+- winit's `WindowExtIOS` already covers what an iOS game needs: `set_prefers_home_indicator_hidden`,
+  `set_preferred_screen_edges_deferring_system_gestures` (so a swipe from the bottom edge does not
+  leave the game), `set_prefers_status_bar_hidden`, `set_valid_orientations` and
+  `set_scale_factor`.
+- A custom `UIApplication` shell would mean writing and maintaining Objective-C or objc2 code for the app
+  delegate, the view, touch forwarding, layer resizing and the run loop. That duplicates winit and keeps
+  iOS separate from the code that Android and desktop already test.
+
+Costs of this choice, and how we deal with them:
+
+- `run_app` never returns on iOS, because `UIApplicationMain` does not return. Anything after
+  `event_loop.run_app(...)` in `game::run` does not run. The iOS start path must not rely on it: saving
+  happens on `suspended`, not on exit.
+- winit 0.30 has no iOS text input (IME). Phase 3 uses Horizon's own on-screen keyboard (`osk.rs`, the
+  one the touch UI already draws). A `UIKeyInput`-based system keyboard can come later.
+- winit has no GameController support. A small objc2 module polls `GCController` once a frame (see
+  [Gamepads](#gamepads)).
+
+**Binary shape.** Android needs a `cdylib` (`crates/horizon-android`) because `NativeActivity` loads a
+`.so`. iOS needs a normal Mach-O executable inside `Horizon.app`, so the iOS app is the existing
+`horizon-client` binary (`src/main.rs` → `game::run`) built for `aarch64-apple-ios`. No new crate is
+needed for the executable. The few objc2 calls that need `unsafe` go in a small crate,
+`crates/horizon-ios-sys`, behind safe functions. `horizon-client`, `horizon-client-render` and `main.rs`
+keep `#![forbid(unsafe_code)]`.
+
+## Metal surface
+
+- `backend_order()` in `crates/horizon-client-render/src/gfx.rs` returns `Backends::default()` when
+  `os == "macos"`. iOS takes the same branch (`os == "macos" || os == "ios"`), and wgpu picks Metal,
+  its only backend on iOS. The `Vulkan → DX12 → GL` fallback list does not apply.
+- The surface is created as on every platform: `instance.create_surface(window.clone())`. wgpu reads the
+  `UiKitWindowHandle` through `raw-window-handle` and attaches a `CAMetalLayer` to the view.
+- The swapchain covers the full screen: `window.outer_size()`, which is 2532×1170 on an iPhone 14 in
+  landscape at scale factor 3. Rendering the world at native resolution is expensive on a phone, so the
+  existing resolution-scale setting defaults lower on iOS. The HUD and touch controls stay at full
+  resolution.
+- Code paths gated `#[cfg(not(target_os = "macos"))]` that reach Vulkan-only code
+  (`horizon_hdr::open_vulkan_device`) and the `gles` wgpu feature become `not(any(macos, ios))`. wgpu
+  has no Vulkan or GL backend on Apple targets without MoltenVK, which we do not ship.
+
+## Lifecycle
+
+iOS kills apps that submit GPU work in the background, and may terminate a backgrounded app without
+warning. winit sends `suspended` when the app resigns active (app switcher, Control Centre, a call,
+locking the phone) and `resumed` when it becomes active again.
+
+- **`suspended` (going to background):** reuse the path Android already takes in `Game::suspended`:
+  release held touches and keys, open the pause screen, and call `renderer.suspend_surface()`, which
+  drops the `wgpu::Surface` and keeps the device, queue, pipelines and textures. On iOS this also
+  **saves the world** (the same save the pause menu triggers) and pauses the server thread's ticking,
+  because the app may never come back.
+- **No frames while suspended:** `about_to_wait` and redraw requests do nothing while the surface is
+  gone, so nothing is encoded for the GPU.
+- **`resumed` (back to foreground):** `renderer.recreate_surface()` from the same window, then resize to
+  the current `outer_size()` because the device may have rotated. The existing `#[cfg(target_os =
+  "android")]` block in `Game::resumed` and `Loading::resumed` widens to Android *or* iOS. The first
+  `resumed` at launch creates the renderer, as on desktop.
+- **`memory_warning`:** drop the streaming caches and far LOD meshes, and write a log line. If it
+  happens again, lower the render distance by 2 for the rest of the session.
+
+## Safe area
+
+On iOS, winit's `inner_position()` and `inner_size()` return the **safe area** (what the Dynamic
+Island, rounded corners and home indicator leave free), and `outer_size()` returns the full screen.
+
+- The world and the sky render full screen, edge to edge, to the `outer_size()` swapchain.
+- The HUD (hotbar, chat, F3, scoreboard) and every touch button are laid out inside the safe area. The
+  insets are `inner_position` (left/top) and `outer − inner − position` (right/bottom), in physical
+  pixels. On an iPhone 14 in landscape that is about 47 pt on each side and 21 pt at the bottom.
+- The insets feed the existing **HUD margins** (Options → Accessibility) as a *minimum*, so the player
+  can add margin but not go below the notch. They also offset the touch layout's anchor rectangle in
+  `touch.rs`. Hit-testing uses the same rectangle, so drawing and input stay aligned.
+- Recompute on `Resized` and `ScaleFactorChanged` (rotation, split view is not supported).
+- The app runs landscape-only at first (`UISupportedInterfaceOrientations` = landscape left and right).
+  The home indicator is hidden and all screen edges defer system gestures, so the first swipe from an
+  edge goes to the game and only a second swipe goes to iOS.
+
+## Touch → controls
+
+The touch controls are platform-independent Rust: `crates/horizon-client-render/src/touch.rs` (the
+schemes, layout, hit-testing and camera deltas, re-exported as `horizon_client::touch`) and
+`crates/horizon-client/src/touch_ui.rs` (menu gestures, the `...` key drawer and the virtual mouse).
+
+- winit gives `WindowEvent::Touch { id, phase, location, force }` with `location` in physical pixels:
+  the same as Android's NativeActivity backend. `game.rs` already sends these to the touch code, behind
+  86 `#[cfg(target_os = "android")]` gates.
+- Phase 3 sorts those gates into two groups:
+  - **mobile** (touch, the layout editor, auto-pause, mobile defaults): changed to a build-time
+    `cfg(horizon_mobile)` alias, set by `horizon-client`'s `build.rs` for `target_os = "android"` or
+    `"ios"` and declared with `cargo::rustc-check-cfg`;
+  - **Android-only** (JNI, the Android keyboard, MediaStore, the Keystore, vibration): left as
+    `target_os = "android"`.
+- Multiple touches: winit's iOS view already sets `multipleTouchEnabled` (`view.rs`), so two thumbs (move and look) work at once.
+- `horizon_client::android_runtime::input_mode()` decides between touch and keyboard/mouse. On iOS it
+  starts as Touch, and switches to Controller when a controller connects.
+
+## Gamepads
+
+gilrs has no iOS backend (its `default` stub reports no pads), and `horizon-dualsense` talks to HID,
+which iOS does not expose. The iOS build turns off the `controllers` feature and adds a GameController
+reader:
+
+- `horizon-ios-sys` polls `GCController.controllers()` → `extendedGamepad` once a frame (no callbacks
+  across threads) and fills the existing `horizon_client_input::gamepad::PadState`, the same state the
+  Android decoder (`android_gamepad.rs`) and gilrs fill. Mappings, deadzones, glyphs and menu navigation
+  then come from the shared code.
+- This covers Xbox, PlayStation (DualShock 4, DualSense), MFi and Switch Pro controllers paired over
+  Bluetooth. Rumble (`GCDeviceHaptics`) can come later.
+
+## Data directory
+
+The app's sandbox `Documents/` folder is visible in the Files app ("On My iPhone → Horizon") and in
+Finder's file-sharing tab when the iPhone is plugged into a Mac, through these `Info.plist` keys:
+
+```xml
+<key>UIFileSharingEnabled</key><true/>
+<key>LSSupportsOpeningDocumentsInPlace</key><true/>
+```
+
+iOS sets `HOME` to the app's container, so `$HOME/Documents` can be found without calling Foundation.
+
+```
+Documents/
+  horizon-client/26.3/   ← the player copies this in: their own .local/horizon-client/26.3,
+                           prepared by the desktop launcher (horizon-prepare)
+  horizon/               ← the game home (logging::set_game_home): saves/, options.txt,
+                           logs/, crash-reports/, screenshots/, resourcepacks/
+Library/Caches/horizon/  ← things that can be rebuilt: shader cache, downloaded server packs
+```
+
+- At start, the iOS path calls `logging::set_game_home(Documents/horizon)` and passes
+  `--resources Documents/horizon-client/26.3`.
+- If the resources are missing or incomplete (`missing_resources()` in `game.rs`), the game shows a
+  screen saying exactly which folder to copy where, instead of the desktop's "run the launcher"
+  message. It does not offer to prepare them.
+- Nothing from Mojang is in the repository or the `.ipa`. The player supplies their own prepared copy.
+- Logs and crash reports land in `Documents/horizon/logs` and `crash-reports`, so a tester can send
+  them from the Files app.
+
+## Audio
+
+- `cpal` (the `audio` feature of `horizon-client-render`) has a CoreAudio backend for iOS, so the
+  mixer in `audio.rs` works unchanged.
+- The default audio session category (`SoloAmbient`) respects the silent switch and stops other apps'
+  music. Phase 3 keeps it. Setting `Ambient` (mix with the player's music) is a later option in
+  `horizon-ios-sys`.
+- An interruption (a phone call) arrives as `suspended`. The stream is paused there and restarted on
+  `resumed`, because CoreAudio does not always resume a stream that an interruption stopped.
+
+## Memory and performance
+
+- An iPhone 14 has 6 GB of RAM. Jetsam usually kills a foreground app at around 2.8–3 GB. The
+  `com.apple.developer.kernel.increased-memory-limit` entitlement raises that limit, but free Apple ID
+  signing (SideStore/AltStore without a paid account) may remove it, so we cannot count on it.
+- iOS defaults, applied only when `options.txt` does not exist yet (the player's choices always win):
+  **render distance 6**, simulation distance 6, a lower resolution scale, fast graphics, clouds off,
+  and the frame limit at the display's 60 Hz.
+- Worker threads: the A15 has 2 performance and 4 efficiency cores. The streaming pool starts with 3
+  workers so the render thread and the server thread keep a performance core each.
+- `wgpu::MemoryHints::MemoryUsage` (already chosen for Android) on iOS too. `MAPPABLE_PRIMARY_BUFFERS`
+  stays off on mobile, as on Android.
+- The LOD system and large atlases are the main GPU memory costs. The Android atlas reduction
+  (`android_runtime::configure_atlas_limit`) applies only when a texture side goes over
+  `max_texture_dimension_2d` (16384 on A15), so it does not trigger on iOS.
+
+## wgpu features on A15 Metal
+
+`open_backend` in `gfx.rs` asks for `adapter.features() ∩ wanted`. **No feature is strictly required**:
+the renderer checks `device.features()` and falls back when one is missing. `required_limits` is the
+adapter's own limits, so device creation cannot fail on limits. What the A15 (Apple GPU family 8,
+Metal 3) gives through wgpu-hal's Metal backend (`third_party/wgpu-hal/src/metal/adapter.rs`):
+
+| Feature the renderer asks for | Used for | A15 / iOS 16+ |
+| --- | --- | --- |
+| `INDIRECT_FIRST_INSTANCE` | GPU-driven terrain draws | Yes |
+| `MAPPABLE_PRIMARY_BUFFERS` | Section pages in system memory | Available, but not requested on mobile (as on Android) |
+| `TEXTURE_FORMAT_16BIT_NORM` | Shader-pack buffers | Yes |
+| `TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES` | Shader-pack render targets | Yes |
+| `RG11B10UFLOAT_RENDERABLE` | Float targets for shader packs | Yes (Apple GPUs render to it) |
+| `SUBGROUP` | Shader-pack compute programs | Yes (SIMD-scoped operations, Apple7+) |
+| `VERTEX_WRITABLE_STORAGE` | Storage buffers in vertex shaders | Yes |
+| `CLEAR_TEXTURE` | Clearing shader-pack images | Yes |
+| `TEXTURE_ATOMIC` | Shader-pack image atomics | **Only on iOS 17+** (needs MSL 3.1). Missing on iOS 16: shader packs that use image atomics are turned off |
+| `FLOAT32_BLENDABLE` (`oit::features`) | Order-independent translucency | wgpu reports it; **check on the device**. If it is missing or broken, OIT turns itself off and sorted translucency is used |
+| `TIMESTAMP_QUERY`, `…_INSIDE_ENCODERS` (`GpuTimer`) | F3 GPU timings | Probably only at stage boundaries. When missing, the GPU timer turns itself off |
+| `SHADER_EARLY_DEPTH_TEST` (`cull::features`) | Occlusion culling on Vulkan | Not on Metal. `cull::supported` already has a Metal path |
+
+Limits to watch on the device: `max_texture_array_layers` is 2048 (the terrain array needs about
+1300 layers, so it fits), `max_texture_dimension_2d` is 16384, and `max_buffer_size` depends on the
+device's RAM. Shaders go WGSL → naga → MSL → the system Metal compiler. That compiler is part of iOS,
+so it is allowed even though the app itself cannot JIT. Pipeline creation at the first launch may be
+slow, and it is logged.
+
+## Build and packaging
+
+**CI (Phase 2): `.github/workflows/ios.yml`** on `macos-latest`:
+
+```sh
+rustup target add aarch64-apple-ios
+IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios \
+  -p horizon-client --bin horizon-client --no-default-features --features audio
+```
+
+- `--no-default-features --features audio`: no `controllers` (gilrs/hidapi) and no `mods`.
+- Dependencies that do not build for iOS are gated in `crates/horizon-client/Cargo.toml`: `arboard`
+  becomes `not(any(android, ios))` (the clipboard goes through `UIPasteboard` in `horizon-ios-sys`
+  later), and wgpu's `gles` becomes `not(any(macos, ios))`.
+- Packaging, a plain shell script (`tools/ios_package.sh`), with no Xcode project:
+  `Payload/Horizon.app/` = the binary (`CFBundleExecutable` = `Horizon`), `Info.plist`
+  (`packaging/ios/Info.plist`) and icon PNGs resized from `packaging/icons/hicolor/512x512/apps/horizon.png`
+  with `sips` → `zip -r Horizon.ipa Payload`. **Unsigned**: SideStore/AltStore sign it with the
+  player's Apple ID when installing.
+- `Info.plist` essentials: `CFBundleIdentifier` `dev.horizonlab.horizon.ios`, `MinimumOSVersion` 16.0,
+  `UIDeviceFamily` [1] (iPhone), `UIRequiredDeviceCapabilities` [arm64, metal],
+  `UISupportedInterfaceOrientations` landscape, `UIRequiresFullScreen`, `UIStatusBarHidden`, an
+  empty `UILaunchScreen` dictionary (without it iOS runs the app letterboxed at a legacy screen size),
+  the two file-sharing keys, and `NSLocalNetworkUsageDescription` for LAN/direct connect to local
+  servers.
+- The workflow uploads `Horizon.ipa` as an artifact on every run. On pushes to `ios` it also updates
+  a rolling `ios-latest` prerelease.
+- Locally, on Linux: `cargo check --target aarch64-apple-ios -p horizon-client --no-default-features
+  --features audio` catches Rust errors and cfg mistakes. Anything that links against the iOS SDK
+  (objc2 frameworks, cpal's CoreAudio) is only checked for real on CI.
+
+## Phases
+
+1. **Plan:** this page.
+2. **CI first:** `ios.yml`, the packaging script and `Info.plist`, then cfg gates until the build
+   passes and an `.ipa` is uploaded. The app may only show a black screen at this point.
+3. **Shell:** the start path (Documents paths, defaults), Metal on iOS in `backend_order`, the
+   `horizon_mobile` cfg alias for the touch path, lifecycle, safe area, the GameController reader and
+   the missing-resources screen. Done when the app boots to the title screen on the iPhone 14, with
+   touch controls and a gamepad.
+
+Later: system keyboard, clipboard, `Ambient` audio, rumble, the increased-memory entitlement where
+signing allows it, portrait mode, iPad.
+
+## Installing a test build (once Phase 2 produces one)
+
+1. Install SideStore (or AltStore) on the iPhone and sign in with your Apple ID.
+2. Download `Horizon.ipa` from the workflow artifact or the `ios-latest` prerelease, then open it in
+   SideStore → **My Apps → +**.
+3. On a computer, prepare resources with the desktop launcher, then copy
+   `.local/horizon-client/26.3` into **Files → On My iPhone → Horizon → horizon-client/26.3**. You can
+   AirDrop or upload a zip and unzip it in Files, or use Finder's file-sharing tab.
+4. Free Apple ID signing expires after 7 days. Refresh the app in SideStore; saves in `Documents/`
+   are kept.
