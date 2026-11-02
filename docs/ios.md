@@ -314,11 +314,12 @@ iPad.
 
 ## Installing a test build
 
-1. Install SideStore (or AltStore) on the iPhone and sign in with your Apple ID.
-2. Download `Horizon.ipa` from the workflow artifact or the `ios-latest` prerelease, then open it in
-   SideStore → **My Apps → +**.
-3. On a computer, prepare resources with the desktop launcher, then copy
-   `.local/horizon-client/26.3` into **Files → On My iPhone → Horizon → horizon-client/26.3**. You can
-   AirDrop or upload a zip and unzip it in Files, or use Finder's file-sharing tab.
-4. Free Apple ID signing expires after 7 days. Refresh the app in SideStore; saves in `Documents/`
+The steps players follow are in the README ("Install on an iPhone"). In short:
+
+1. Download `Horizon.ipa` from the newest `ios-build-N` release.
+2. Install it with [Impactor](https://github.com/claration/impactor) from a computer (it signs with
+   your Apple ID and installs over USB), or with SideStore or AltStore on the phone.
+3. Copy the desktop launcher's `.local/horizon-client/26.3` into
+   **Files → On My iPhone → Horizon → horizon-client/26.3**.
+4. Free Apple ID signing expires after 7 days: re-sign with the same tool. Saves in `Documents/`
    are kept.

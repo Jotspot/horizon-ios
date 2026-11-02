@@ -77,23 +77,52 @@ use its own registration through `HORIZON_MSA_CLIENT_ID`.
 
 ## Install on an iPhone
 
-1. Install [SideStore](https://sidestore.io) or [AltStore](https://altstore.io) on the iPhone and
-   sign in with your Apple ID.
-2. Download `Horizon.ipa` from the newest `ios-build-N` release on the
-   [releases page](https://github.com/Jotspot/horizon-ios/releases) (each lists what changed), then
-   open it in SideStore or AltStore (**My Apps → +**). The `.ipa` is unsigned; the app signs it with
-   your Apple ID when it installs.
-3. On a computer, let the desktop Horizon launcher prepare the game from your own copy of
-   Minecraft: Java Edition. It writes `.local/horizon-client/26.3`.
-4. Copy that `26.3` folder to the iPhone under
-   **Files → On My iPhone → Horizon → horizon-client → 26.3**: zip it and AirDrop the zip, then unzip
-   it in Files, or use Finder's file-sharing tab with the iPhone plugged into a Mac.
-5. Open Horizon with an internet connection the first time: it downloads the touch buttons'
-   textures (about 30 small files from Mojang's official samples). After that it works offline. Saves, `options.txt`, logs and crash reports are in
-   **Files → On My iPhone → Horizon → horizon**. Attach the newest log from `logs/` to a bug report.
+**1. Install Horizon.** Download `Horizon.ipa` from the newest `ios-build-N` release on the
+[releases page](https://github.com/Jotspot/horizon-ios/releases) (each lists what changed). The
+`.ipa` is unsigned: the tool you install it with signs it with your Apple ID. Either:
 
-A free Apple ID signature expires after 7 days: refresh the app in SideStore or AltStore. Your saves
-are kept.
+- **[Impactor](https://github.com/claration/impactor)** on a computer (macOS, Windows or Linux; the
+  easiest start). Plug the iPhone in, sign in with your Apple ID in Impactor, and give it
+  `Horizon.ipa`: it registers the phone, signs the app and installs it over USB. On macOS:
+  `brew install --cask impactor`; on Linux it is on Flathub; on Windows it needs iTunes for the
+  phone's drivers.
+- **[SideStore](https://sidestore.io)** or **[AltStore](https://altstore.io)** on the iPhone itself
+  (Impactor can install SideStore for you): open `Horizon.ipa` in it (**My Apps → +**).
+
+The first time, allow the app under **Settings → General → VPN & Device Management**, and turn on
+**Developer Mode** if iOS asks for it.
+
+**2. Copy your game files.** On a computer, let the desktop Horizon launcher prepare the game from
+your own copy of Minecraft: Java Edition (sign in and press **Play** once). It writes them to
+`.local/horizon-client/26.3` inside the installed version's folder, where `<version>` is a folder
+like `v2026.10.13.1` (take the newest):
+
+| Computer | Folder to copy |
+| --- | --- |
+| macOS | `~/Library/Application Support/horizon-launcher/versions/<version>/.local/horizon-client/26.3` |
+| Windows | `%APPDATA%\horizon-launcher\versions\<version>\.local\horizon-client\26.3` |
+| Linux | `~/.local/share/horizon-launcher/versions/<version>/.local/horizon-client/26.3` |
+
+The right folder has `horizon-resources.json` directly inside it. `Library` and `.local` are hidden:
+on macOS use **Finder → Go → Go to Folder…** (Cmd+Shift+G) and paste the path, or press
+Cmd+Shift+. to show hidden files. In Terminal, this zips the newest version's folder to your Desktop:
+
+```bash
+cd "$(ls -d ~/Library/Application\ Support/horizon-launcher/versions/*/.local/horizon-client | tail -n 1)" && zip -r ~/Desktop/26.3.zip 26.3
+```
+
+Copy that `26.3` folder to the iPhone under **Files → On My iPhone → Horizon → horizon-client →
+26.3**: AirDrop the zip and unzip it in Files, or use Finder's file-sharing tab with the iPhone
+plugged into a Mac. (If you set `HORIZON_LAUNCHER_HOME`, the launcher uses that folder instead.)
+
+**3. Play.** Open Horizon with an internet connection the first time: it downloads the touch
+buttons' textures (about 30 small files from Mojang's official samples), and works offline after
+that. Saves, `options.txt`, logs and crash reports are in
+**Files → On My iPhone → Horizon → horizon**; attach the newest log from `logs/` to a bug report.
+
+With a free Apple ID the signature lasts 7 days and only a few sideloaded apps are allowed at once.
+Re-sign before it runs out: install the new build again with Impactor, or refresh it in SideStore
+or AltStore. Your saves are kept.
 
 ## Build the iOS app
 

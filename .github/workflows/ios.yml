@@ -6,8 +6,12 @@ name: iOS build
 on:
   push:
     branches: [ios]
+    # Text-only changes publish no new build.
+    paths-ignore:
+      - "README.md"
+      - "docs/**"
   pull_request:
-    branches: [android]
+    branches: [ios, android]
     paths:
       - ".github/workflows/ios.yml"
       - "packaging/ios/**"
