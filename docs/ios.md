@@ -215,7 +215,7 @@ Metal 3) gives through wgpu-hal's Metal backend (`third_party/wgpu-hal/src/metal
 | `SUBGROUP` | Shader-pack compute programs | Yes (SIMD-scoped operations, Apple7+) |
 | `VERTEX_WRITABLE_STORAGE` | Storage buffers in vertex shaders | Yes |
 | `CLEAR_TEXTURE` | Clearing shader-pack images | Yes |
-| `TEXTURE_ATOMIC` | Shader-pack image atomics | **Only on iOS 17+** (needs MSL 3.1). Missing on iOS 16: shader packs that use image atomics are turned off |
+| `TEXTURE_ATOMIC` | Shader-pack image atomics | **Only on iOS 17+** (needs MSL 3.1), so present on the iOS 27 test phone. Missing on iOS 16: shader packs that use image atomics are turned off |
 | `FLOAT32_BLENDABLE` (`oit::features`) | Order-independent translucency | wgpu reports it; **check on the device**. If it is missing or broken, OIT turns itself off and sorted translucency is used |
 | `TIMESTAMP_QUERY`, `…_INSIDE_ENCODERS` (`GpuTimer`) | F3 GPU timings | Probably only at stage boundaries. When missing, the GPU timer turns itself off |
 | `SHADER_EARLY_DEPTH_TEST` (`cull::features`) | Occlusion culling on Vulkan | Not on Metal. `cull::supported` already has a Metal path |
@@ -253,9 +253,10 @@ IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios
   servers.
 - The workflow uploads `Horizon.ipa` as an artifact on every run. On pushes to `ios` it also updates
   a rolling `ios-latest` prerelease.
-- Locally, on Linux: `cargo check --target aarch64-apple-ios -p horizon-client --no-default-features
-  --features audio` catches Rust errors and cfg mistakes. Anything that links against the iOS SDK
-  (objc2 frameworks, cpal's CoreAudio) is only checked for real on CI.
+- Locally, on Linux: `tools/ios_check.sh` runs `cargo check --target aarch64-apple-ios` with the
+  same features. There is no iOS SDK on Linux, so it uses a stand-in C compiler that writes empty
+  objects for the C build scripts (ring, mimalloc). Those objects are never linked. It catches Rust
+  errors and cfg mistakes. Anything that links against the SDK is only checked for real on CI.
 
 ## Phases
 
