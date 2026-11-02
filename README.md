@@ -1,11 +1,80 @@
+# Horizon iOS
+
+An iPhone port of [Horizon](https://github.com/ludovic111/horizon), the Rust engine for
+Minecraft: Java Edition 26.3. It is built on MocLG's Android port
+([horizon-android](https://github.com/Vasysik/horizon-android)) and shares its touch controls.
+Unofficial and in early development: **not confirmed on a device yet.**
+
+**iPhone · iOS 16+ · Metal · Touch controls and Bluetooth controllers · Sideloaded with SideStore or AltStore**
+
+[Download the test IPA](https://github.com/Jotspot/horizon-ios/releases/tag/ios-latest) ·
+[iOS guide](docs/ios.md) ·
+[Report an iOS bug](https://github.com/Jotspot/horizon-ios/issues/new) ·
+[Android port](#horizon-android)
+
+## iOS status
+
+| Area | State |
+| --- | --- |
+| Unsigned `.ipa` built on GitHub Actions (macOS) | Working: every push to `ios` refreshes the `ios-latest` prerelease |
+| Boot to the title screen, Metal rendering | Written, waiting for the first device test |
+| Touch controls and touch menus (shared with Android) | Written, waiting for the first device test |
+| Xbox, PlayStation and MFi controllers (GameController) | Written, waiting for the first device test |
+| Safe area, landscape, background and foreground | Written, waiting for the first device test |
+| Saves, options and logs in the Files app | Written, waiting for the first device test |
+| System keyboard | Not yet: text fields use Horizon's on-screen keyboard |
+| Preparing resources on the phone | Not on iOS: it needs a JVM. Copy prepared resources in |
+| Code mods (`.hmod` with code) | Not on iOS: they need a JIT, which iOS does not allow. Content mods load |
+| iPad, portrait, system clipboard, rumble | Not yet |
+
+The first target is an iPhone 14 (A15). Other iPhones with a recent iOS should behave the same,
+but only that phone is being tested. See [the plan and the design notes](docs/ios.md) for how the
+port works and what is left.
+
+## Install on an iPhone
+
+1. Install [SideStore](https://sidestore.io) or [AltStore](https://altstore.io) on the iPhone and
+   sign in with your Apple ID.
+2. Download `Horizon.ipa` from the
+   [`ios-latest` prerelease](https://github.com/Jotspot/horizon-ios/releases/tag/ios-latest), then
+   open it in SideStore or AltStore (**My Apps → +**). The `.ipa` is unsigned; the app signs it with
+   your Apple ID when it installs.
+3. On a computer, let the desktop Horizon launcher prepare the game from your own copy of
+   Minecraft: Java Edition. It writes `.local/horizon-client/26.3`.
+4. Copy that `26.3` folder to the iPhone under
+   **Files → On My iPhone → Horizon → horizon-client → 26.3**: zip it and AirDrop the zip, then unzip
+   it in Files, or use Finder's file-sharing tab with the iPhone plugged into a Mac.
+5. Open Horizon. Saves, `options.txt`, logs and crash reports are in
+   **Files → On My iPhone → Horizon → horizon**. Attach the newest log from `logs/` to a bug report.
+
+A free Apple ID signature expires after 7 days: refresh the app in SideStore or AltStore. Your saves
+are kept.
+
+## Build the iOS app
+
+There is no Xcode project. `.github/workflows/ios.yml` builds on a macOS runner:
+
+```sh
+rustup target add aarch64-apple-ios
+IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios \
+  -p horizon-client --bin horizon-client --no-default-features --features audio
+tools/ios_package.sh target/aarch64-apple-ios/release/horizon-client .local/ios
+```
+
+`tools/ios_package.sh` packs the binary, [`packaging/ios/Info.plist`](packaging/ios/Info.plist) and
+the icons into `Payload/Horizon.app`, then zips it into `Horizon.ipa`. On Linux,
+`tools/ios_check.sh` runs `cargo check` for iOS without an SDK, which catches most compile errors
+before CI. iOS code sits behind `#[cfg(target_os = "ios")]`, or
+`#[cfg(any(target_os = "android", target_os = "ios"))]` where it shares Android's touch code, so
+desktop and Android builds are unchanged. Never commit Minecraft's files: the app only reads
+resources the player copies in.
+
 # Horizon Android
 
-A native Android port of [Horizon](https://github.com/ludovic111/horizon), the
-Rust engine for Minecraft Java 26.3. Unofficial and in active development.
+MocLG's native Android port, which this fork builds on. The sections below describe the Android
+app and are kept from it.
 
 **Android 9+ · Vulkan · Four touch schemes · Sandboxed `.hmod` mods**
-
-**iOS port in progress** (iPhone, Metal, sideloaded). See [Horizon on iOS](docs/ios.md).
 
 [Download APK](https://github.com/Vasysik/horizon-android/releases) · [Build & play](docs/android.md) · [Contribute](CONTRIBUTING_ANDROID.md) ·
 [Report an Android bug](https://github.com/Vasysik/horizon-android/issues/new?template=android-bug.yml)
@@ -58,28 +127,13 @@ Fujitsu F-03L · Portrait mode
 | --- | --- |
 | <img src="docs/media/android/fujitsu-f03l-menu.png" alt="Horizon main menu on a Fujitsu F-03L flip phone in portrait mode" width="220"> | <img src="docs/media/android/fujitsu-f03l-gameplay.png" alt="Minecraft world running on a Fujitsu F-03L flip phone in portrait mode" width="220"> |
 
-## On iOS (in progress)
-
-This fork is adding an iOS build of the same engine, starting with an iPhone 14
-(A15) sideloaded through SideStore or AltStore. It uses winit's UIKit backend,
-wgpu's Metal backend and the same touch controls as Android. It is **not
-playable yet**. The plan, and how to install a test build once CI produces one,
-are in [docs/ios.md](docs/ios.md).
-
-- Unsigned `.ipa` built on GitHub Actions macOS runners; you sign it with your
-  own Apple ID when you install it.
-- Resources are not downloaded or prepared on the phone. You copy in a
-  `.local/horizon-client/26.3` folder that the desktop launcher prepared, using
-  the Files app.
-- Code mods (wasm JIT) and on-device preparation (a JVM) are turned off on iOS,
-  because iOS does not allow run-time code generation.
-
 ## Help build it
 
 Try a developer build, send a reproducible bug report, or contribute a focused
 pull request against `android`. Touch input, accessibility, hardware controllers,
 Android lifecycle and real-phone profiling are useful areas to help.
-[Start here](CONTRIBUTING_ANDROID.md).
+[Start here](CONTRIBUTING_ANDROID.md). For the iOS port, testing on an iPhone and
+reporting what you see (with the log from the Files app) helps most.
 
 If the port is useful to you, **star the repository** so other players and
 contributors can find it.
