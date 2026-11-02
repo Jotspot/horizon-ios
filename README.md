@@ -5,6 +5,8 @@ Rust engine for Minecraft Java 26.3. Unofficial and in active development.
 
 **Android 9+ · Vulkan · Four touch schemes · Sandboxed `.hmod` mods**
 
+**iOS port in progress** (iPhone, Metal, sideloaded). See [Horizon on iOS](docs/ios.md).
+
 [Download APK](https://github.com/Vasysik/horizon-android/releases) · [Build & play](docs/android.md) · [Contribute](CONTRIBUTING_ANDROID.md) ·
 [Report an Android bug](https://github.com/Vasysik/horizon-android/issues/new?template=android-bug.yml)
 
@@ -55,6 +57,22 @@ Fujitsu F-03L · Portrait mode
 | **Main menu** | **In-game** |
 | --- | --- |
 | <img src="docs/media/android/fujitsu-f03l-menu.png" alt="Horizon main menu on a Fujitsu F-03L flip phone in portrait mode" width="220"> | <img src="docs/media/android/fujitsu-f03l-gameplay.png" alt="Minecraft world running on a Fujitsu F-03L flip phone in portrait mode" width="220"> |
+
+## On iOS (in progress)
+
+This fork is adding an iOS build of the same engine, starting with an iPhone 14
+(A15) sideloaded through SideStore or AltStore. It uses winit's UIKit backend,
+wgpu's Metal backend and the same touch controls as Android. It is **not
+playable yet**. The plan, and how to install a test build once CI produces one,
+are in [docs/ios.md](docs/ios.md).
+
+- Unsigned `.ipa` built on GitHub Actions macOS runners; you sign it with your
+  own Apple ID when you install it.
+- Resources are not downloaded or prepared on the phone. You copy in a
+  `.local/horizon-client/26.3` folder that the desktop launcher prepared, using
+  the Files app.
+- Code mods (wasm JIT) and on-device preparation (a JVM) are turned off on iOS,
+  because iOS does not allow run-time code generation.
 
 ## Help build it
 
