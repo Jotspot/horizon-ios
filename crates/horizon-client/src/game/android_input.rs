@@ -409,13 +409,10 @@ impl Game<'_> {
         if !self.pad_in_menu() {
             self.open_chat("");
         }
-        // iOS has no system keyboard here yet (docs/ios.md): Horizon's on-screen one types
-        // into the focused field instead.
+        // iOS: the system keyboard follows the focused field through winit's text input, as on
+        // desktop (`ime.rs`), so there is nothing more to open.
         #[cfg(target_os = "ios")]
-        {
-            self.pad.menu.osk = Some(horizon_client::osk::Keyboard::default());
-            return;
-        }
+        return;
         #[cfg_attr(target_os = "ios", allow(unreachable_code))]
         let initial = if self.dialog_open() {
             self.dialog_edit_value()

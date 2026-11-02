@@ -47,8 +47,8 @@ Costs of this choice, and how we deal with them:
 - `run_app` never returns on iOS, because `UIApplicationMain` does not return. Anything after
   `event_loop.run_app(...)` in `game::run` does not run. The iOS start path must not rely on it: saving
   happens on `suspended`, not on exit.
-- winit 0.30 has no iOS text input (IME). Phase 3 uses Horizon's own on-screen keyboard (`osk.rs`, the
-  one the touch UI already draws). A `UIKeyInput`-based system keyboard can come later.
+- Text input: winit's iOS backend shows the system keyboard for a focused text field
+  (`set_ime_allowed`), which the game's desktop text path already calls (confirmed on the device).
 - winit has no GameController support. A small objc2 module polls `GCController` once a frame (see
   [Gamepads](#gamepads)).
 
@@ -133,9 +133,13 @@ schemes, layout, hit-testing and camera deltas, re-exported as `horizon_client::
     performance reports, vibration, gamepad connections): left as `target_os = "android"`, also
     where they sit inside a mobile block.
 - The shared touch glue (`game/android_input.rs`, despite the name) calls a few platform functions;
-  `src/ios/platform.rs` gives iOS the same names. Its system keyboard calls are no-ops: a tap on a text
-  field opens Horizon's own on-screen keyboard (`osk.rs`) instead, until a `UIKeyInput` keyboard is
-  wired.
+  `src/ios/platform.rs` gives iOS the same names. Text input needs none of them: the iPhone's
+  keyboard follows the focused text field through winit's text input, as on desktop (`game/ime.rs`),
+  confirmed on the iPhone 14.
+- The buttons' textures are not in the desktop-prepared folder. As on Android, the iOS app
+  downloads them on first launch from Mojang's `bedrock-samples` at the pinned, hash-checked
+  revision in `packaging/android/bedrock-controls.json`, into
+  `horizon-client/26.3/assets/minecraft/textures/gui/bedrock`.
 - Multiple touches: winit's iOS view already sets `multipleTouchEnabled` (`view.rs`), so two thumbs (move and look) work at once.
 - `horizon_client::android_runtime`'s input mode (plain Rust, shared with Android) decides what shows:
   a touch selects Touch, a hardware key Keyboard/Mouse, a controller's button or stick Controller,
@@ -281,7 +285,7 @@ IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios
    the app boots to the title screen on the iPhone 14, with touch controls and a gamepad. Written;
    waiting for the first device test.
 
-Later: the system keyboard, the clipboard (`UIPasteboard`), `memory_warning`, `Ambient` audio,
+Later: the clipboard (`UIPasteboard`), `memory_warning`, `Ambient` audio,
 rumble, opening links, the increased-memory entitlement where signing allows it, portrait mode,
 iPad.
 

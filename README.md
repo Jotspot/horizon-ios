@@ -3,7 +3,8 @@
 An iPhone port of [Horizon](https://github.com/ludovic111/horizon), the Rust engine for
 Minecraft: Java Edition 26.3. It is built on MocLG's Android port
 ([horizon-android](https://github.com/Vasysik/horizon-android)) and shares its touch controls.
-Unofficial and in early development: **not confirmed on a device yet.**
+Unofficial and in early development: it boots into a world on an iPhone 14, and the in-game touch
+controls are being finished.
 
 **iPhone · iOS 16+ · Metal · Touch controls and Bluetooth controllers · Sideloaded with SideStore or AltStore**
 
@@ -17,15 +18,16 @@ Unofficial and in early development: **not confirmed on a device yet.**
 | Area | State |
 | --- | --- |
 | Unsigned `.ipa` built on GitHub Actions (macOS) | Working: every push to `ios` refreshes the `ios-latest` prerelease |
-| Boot to the title screen, Metal rendering | Written, waiting for the first device test |
-| Touch controls and touch menus (shared with Android) | Written, waiting for the first device test |
+| Boot to the title screen, Metal rendering, full-screen landscape | Working on an iPhone 14 |
+| Touch menus, the `...` key drawer | Working on an iPhone 14 |
+| In-game touch buttons (joystick, jump...) | Fixed, waiting for a device test: their textures download on first launch |
 | Xbox, PlayStation and MFi controllers (GameController) | Written, waiting for the first device test |
 | Safe area, landscape, background and foreground | Written, waiting for the first device test |
-| Saves, options and logs in the Files app | Written, waiting for the first device test |
-| System keyboard | Not yet: text fields use Horizon's on-screen keyboard |
+| Single-player world, saves, options and logs in the Files app | Working on an iPhone 14 |
+| iPhone keyboard in text fields | Working on an iPhone 14 |
 | Preparing resources on the phone | Not on iOS: it needs a JVM. Copy prepared resources in |
 | Code mods (`.hmod` with code) | Not on iOS: they need a JIT, which iOS does not allow. Content mods load |
-| iPad, portrait, system clipboard, rumble | Not yet |
+| iPad, portrait, system clipboard, narrator, rumble | Not yet |
 
 The first target is an iPhone 14 (A15). Other iPhones with a recent iOS should behave the same,
 but only that phone is being tested. See [the plan and the design notes](docs/ios.md) for how the
@@ -44,7 +46,8 @@ port works and what is left.
 4. Copy that `26.3` folder to the iPhone under
    **Files → On My iPhone → Horizon → horizon-client → 26.3**: zip it and AirDrop the zip, then unzip
    it in Files, or use Finder's file-sharing tab with the iPhone plugged into a Mac.
-5. Open Horizon. Saves, `options.txt`, logs and crash reports are in
+5. Open Horizon with an internet connection the first time: it downloads the touch buttons'
+   textures (about 30 small files from Mojang's official samples). After that it works offline. Saves, `options.txt`, logs and crash reports are in
    **Files → On My iPhone → Horizon → horizon**. Attach the newest log from `logs/` to a bug report.
 
 A free Apple ID signature expires after 7 days: refresh the app in SideStore or AltStore. Your saves

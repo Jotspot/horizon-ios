@@ -1,7 +1,6 @@
 //! The iOS side of the platform calls the shared touch glue makes (`game/android_input.rs`), with
-//! the same names as `android/platform.rs`. winit 0.30 has no iOS text input, so the system
-//! keyboard is not wired yet (docs/ios.md): text fields take a hardware keyboard or a controller's
-//! on-screen keyboard.
+//! the same names as `android/platform.rs`. The system keyboard is not driven from here: on iOS it
+//! follows the focused text field through winit's text input, as on desktop (`game/ime.rs`).
 use horizon_client::osk::Output;
 use horizon_client::{android_gamepad::InputMode, android_runtime};
 
@@ -25,9 +24,7 @@ pub(crate) fn keyboard_mouse_input() -> bool {
 pub fn active() -> bool {
     false
 }
-pub fn show(_text: &str) {
-    log::info!("Horizon iOS: the system keyboard is not available yet");
-}
+pub fn show(_text: &str) {}
 pub fn show_multiline(text: &str) {
     show(text);
 }

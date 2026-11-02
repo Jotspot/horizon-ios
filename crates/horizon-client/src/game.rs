@@ -19111,6 +19111,21 @@ fn load_resources(
     progress: &Progress,
     publish: &mut dyn FnMut(UiResources, &std::path::Path),
 ) -> Result<Loaded> {
+    // iOS: the touch controls' textures, which the desktop launcher does not prepare, come from
+    // Mojang's bedrock-samples at the pinned, hash-checked revision Android installs
+    // (packaging/android/bedrock-controls.json). Present files are kept, so only the first
+    // launch needs the network; without it the controls stay invisible until a later launch.
+    #[cfg(target_os = "ios")]
+    if !headless {
+        let fetched = Instant::now();
+        match horizon_client::android_resources::controls(vanilla_root) {
+            Ok(()) => log::info!(
+                "Horizon iOS: touch control textures ready in {} ms",
+                fetched.elapsed().as_millis()
+            ),
+            Err(e) => log::warn!("Horizon iOS: touch control textures not downloaded: {e}"),
+        }
+    }
     let threads = settings.horizon.worker_threads();
     horizon_client::sprites::set_texture_budget(settings.horizon.texture_budget_mib);
     horizon_client::sprites::set_labpbr_maps(shader_packs::picks_native_pack(settings));
