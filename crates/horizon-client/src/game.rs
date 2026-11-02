@@ -7910,7 +7910,25 @@ impl Game<'_> {
                 self.settings.touch.vertical_margin,
             ]
         }
-        #[cfg(not(target_os = "android"))]
+        // iOS: the HUD margins never go below the safe area (the sensor housing, the
+        // rounded corners and the home indicator); the world still draws edge to edge.
+        #[cfg(target_os = "ios")]
+        {
+            let safe = self.window.as_ref().map_or([0.0; 2], |window| {
+                use winit::platform::ios::WindowExtIOS;
+                let [left, top, right, bottom] = window.safe_area_insets();
+                let size = window.inner_size();
+                [
+                    left.max(right) as f32 / size.width.max(1) as f32,
+                    top.max(bottom) as f32 / size.height.max(1) as f32,
+                ]
+            });
+            [
+                self.settings.touch.horizontal_margin.max(safe[0]),
+                self.settings.touch.vertical_margin.max(safe[1]),
+            ]
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             [0.0; 2]
         }
@@ -15985,6 +16003,8 @@ impl ApplicationHandler for Game<'_> {
         let attributes = Window::default_attributes()
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon());
+        #[cfg(target_os = "ios")]
+        let attributes = ios_window(attributes);
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -20009,6 +20029,8 @@ impl Loading {
         let attributes = Window::default_attributes()
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon());
+        #[cfg(target_os = "ios")]
+        let attributes = ios_window(attributes);
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -20310,6 +20332,20 @@ impl Loading {
         );
         Ok(Some(split::Split::new(game)))
     }
+}
+
+/// iOS: full screen in landscape, with the home indicator and status bar hidden, and the
+/// screen edges deferring system gestures so a swipe from an edge reaches the game first.
+#[cfg(target_os = "ios")]
+pub(crate) fn ios_window(
+    attributes: winit::window::WindowAttributes,
+) -> winit::window::WindowAttributes {
+    use winit::platform::ios::{ScreenEdge, ValidOrientations, WindowAttributesExtIOS};
+    attributes
+        .with_prefers_home_indicator_hidden(true)
+        .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::ALL)
+        .with_prefers_status_bar_hidden(true)
+        .with_valid_orientations(ValidOrientations::Landscape)
 }
 
 /// The application: the loading screen until the resources are ready, then

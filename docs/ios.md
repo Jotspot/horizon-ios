@@ -1,7 +1,8 @@
 # Horizon on iOS (plan)
 
-Status: **plan, nothing built yet.** This page covers how the iOS port is built, packaged and run.
-It will become the player-facing iOS guide once the app boots. The first target is an iPhone 14
+Status: **phase 3, first device test pending.** CI builds an unsigned `.ipa`; the app is written to boot
+to the title screen with touch controls and a controller. This page covers how the iOS port is built,
+packaged and run, and will become the player-facing iOS guide once the app is confirmed on a device. The first target is an iPhone 14
 (A15 Bionic, 6 GB RAM, iOS 16+), sideloaded as an unsigned `.ipa` through SideStore or AltStore.
 
 The port follows the Android one ([android.md](android.md)): the same simulation, renderer and touch
@@ -82,33 +83,36 @@ locking the phone) and `resumed` when it becomes active again.
 - **`suspended` (going to background):** reuse the path Android already takes in `Game::suspended`:
   release held touches and keys, open the pause screen, and call `renderer.suspend_surface()`, which
   drops the `wgpu::Surface` and keeps the device, queue, pipelines and textures. On iOS this also
-  **saves the world** (the same save the pause menu triggers) and pauses the server thread's ticking,
-  because the app may never come back.
+  **saves the world** (`/save-all flush` on single player's server thread), because the app may never
+  come back.
 - **No frames while suspended:** `about_to_wait` and redraw requests do nothing while the surface is
   gone, so nothing is encoded for the GPU.
 - **`resumed` (back to foreground):** `renderer.recreate_surface()` from the same window, then resize to
   the current `outer_size()` because the device may have rotated. The existing `#[cfg(target_os =
   "android")]` block in `Game::resumed` and `Loading::resumed` widens to Android *or* iOS. The first
   `resumed` at launch creates the renderer, as on desktop.
-- **`memory_warning`:** drop the streaming caches and far LOD meshes, and write a log line. If it
-  happens again, lower the render distance by 2 for the rest of the session.
+- **`memory_warning`** (not yet handled): drop the streaming caches and far LOD meshes, and write a log
+  line. If it happens again, lower the render distance by 2 for the rest of the session.
 
 ## Safe area
 
-On iOS, winit's `inner_position()` and `inner_size()` return the **safe area** (what the Dynamic
-Island, rounded corners and home indicator leave free), and `outer_size()` returns the full screen.
+Stock winit 0.30 returns the **safe area** from `inner_size()` on iOS, while `Resized` and the
+`CAMetalLayer` cover the whole view. The game sizes its swapchain from `inner_size()`, so the vendored
+winit is patched (`third_party/winit/PATCHES.md`): on iOS `inner_size()`/`inner_position()` are the
+whole view, and the safe area is a separate call, `WindowExtIOS::safe_area_insets()` (physical left,
+top, right, bottom).
 
-- The world and the sky render full screen, edge to edge, to the `outer_size()` swapchain.
-- The HUD (hotbar, chat, F3, scoreboard) and every touch button are laid out inside the safe area. The
-  insets are `inner_position` (left/top) and `outer − inner − position` (right/bottom), in physical
-  pixels. On an iPhone 14 in landscape that is about 47 pt on each side and 21 pt at the bottom.
-- The insets feed the existing **HUD margins** (Options → Accessibility) as a *minimum*, so the player
-  can add margin but not go below the notch. They also offset the touch layout's anchor rectangle in
-  `touch.rs`. Hit-testing uses the same rectangle, so drawing and input stay aligned.
-- Recompute on `Resized` and `ScaleFactorChanged` (rotation, split view is not supported).
-- The app runs landscape-only at first (`UISupportedInterfaceOrientations` = landscape left and right).
-  The home indicator is hidden and all screen edges defer system gestures, so the first swipe from an
-  edge goes to the game and only a second swipe goes to iOS.
+- The world and the sky render full screen, edge to edge.
+- `hud_safe_margins` (game.rs) takes the larger of the player's **HUD margins** (Options → Controls →
+  Touch Controls) and the safe area as a fraction of the screen, each frame. The HUD overlays never go
+  under the sensor housing or the home indicator; the player can still add margin. On an iPhone 14 in
+  landscape the safe area is about 47 pt on each side and 21 pt at the bottom.
+- The touch buttons keep their own editable layout over the whole screen (**Customize layout...**),
+  because iOS still delivers touches under the sensor housing.
+- The app runs landscape-only (`UISupportedInterfaceOrientations` and `ValidOrientations::Landscape`).
+  The home indicator and status bar are hidden, and all screen edges defer system gestures, so the
+  first swipe from an edge goes to the game and only a second swipe goes to iOS (`ios_window` in
+  game.rs).
 
 ## Touch → controls
 
@@ -119,15 +123,23 @@ schemes, layout, hit-testing and camera deltas, re-exported as `horizon_client::
 - winit gives `WindowEvent::Touch { id, phase, location, force }` with `location` in physical pixels:
   the same as Android's NativeActivity backend. `game.rs` already sends these to the touch code, behind
   86 `#[cfg(target_os = "android")]` gates.
-- Phase 3 sorts those gates into two groups:
-  - **mobile** (touch, the layout editor, auto-pause, mobile defaults): changed to a build-time
-    `cfg(horizon_mobile)` alias, set by `horizon-client`'s `build.rs` for `target_os = "android"` or
-    `"ios"` and declared with `cargo::rustc-check-cfg`;
-  - **Android-only** (JNI, the Android keyboard, MediaStore, the Keystore, vibration): left as
-    `target_os = "android"`.
+- Phase 3 sorted the gates of the client crates into two groups:
+  - **mobile** (touch controls, the touch menus of the title screen and the game, the layout editor,
+    the touch options, suspend/resume, mobile defaults): now
+    `#[cfg(any(target_os = "android", target_os = "ios"))]`. A plain `any(...)` rather than a
+    build-script alias, because `game.rs` is compiled by two crates (`horizon-client` and
+    `horizon-android`) that would both need the alias;
+  - **Android-only** (JNI, the Android keyboard, documents, MediaStore, the display scale, the
+    performance reports, vibration, gamepad connections): left as `target_os = "android"`, also
+    where they sit inside a mobile block.
+- The shared touch glue (`game/android_input.rs`, despite the name) calls a few platform functions;
+  `src/ios/platform.rs` gives iOS the same names. Its system keyboard calls are no-ops: a tap on a text
+  field opens Horizon's own on-screen keyboard (`osk.rs`) instead, until a `UIKeyInput` keyboard is
+  wired.
 - Multiple touches: winit's iOS view already sets `multipleTouchEnabled` (`view.rs`), so two thumbs (move and look) work at once.
-- `horizon_client::android_runtime::input_mode()` decides between touch and keyboard/mouse. On iOS it
-  starts as Touch, and switches to Controller when a controller connects.
+- `horizon_client::android_runtime`'s input mode (plain Rust, shared with Android) decides what shows:
+  a touch selects Touch, a hardware key Keyboard/Mouse, a controller's button or stick Controller,
+  which hides the touch controls as on Android.
 
 ## Gamepads
 
@@ -135,7 +147,8 @@ gilrs has no iOS backend (its `default` stub reports no pads), and `horizon-dual
 which iOS does not expose. The iOS build turns off the `controllers` feature and adds a GameController
 reader:
 
-- `horizon-ios-sys` polls `GCController.controllers()` → `extendedGamepad` once a frame (no callbacks
+- `horizon-ios-sys` polls `GCController.current()` (else the first of `controllers()`) →
+  `extendedGamepad` once a frame (no callbacks
   across threads) and fills the existing `horizon_client_input::gamepad::PadState`, the same state the
   Android decoder (`android_gamepad.rs`) and gilrs fill. Mappings, deadzones, glyphs and menu navigation
   then come from the shared code.
@@ -260,18 +273,19 @@ IPHONEOS_DEPLOYMENT_TARGET=16.0 cargo build --release --target aarch64-apple-ios
 
 ## Phases
 
-1. **Plan:** this page.
+1. **Plan:** this page. Done.
 2. **CI first:** `ios.yml`, the packaging script and `Info.plist`, then cfg gates until the build
-   passes and an `.ipa` is uploaded. The app may only show a black screen at this point.
-3. **Shell:** the start path (Documents paths, defaults), Metal on iOS in `backend_order`, the
-   `horizon_mobile` cfg alias for the touch path, lifecycle, safe area, the GameController reader and
-   the missing-resources screen. Done when the app boots to the title screen on the iPhone 14, with
-   touch controls and a gamepad.
+   passes and an `.ipa` is uploaded. Done.
+3. **Shell:** the start path (Documents paths, defaults), Metal on iOS in `backend_order`, the touch
+   path, lifecycle, safe area, the GameController reader and the missing-resources screen. Done when
+   the app boots to the title screen on the iPhone 14, with touch controls and a gamepad. Written;
+   waiting for the first device test.
 
-Later: system keyboard, clipboard, `Ambient` audio, rumble, the increased-memory entitlement where
-signing allows it, portrait mode, iPad.
+Later: the system keyboard, the clipboard (`UIPasteboard`), `memory_warning`, `Ambient` audio,
+rumble, opening links, the increased-memory entitlement where signing allows it, portrait mode,
+iPad.
 
-## Installing a test build (once Phase 2 produces one)
+## Installing a test build
 
 1. Install SideStore (or AltStore) on the iPhone and sign in with your Apple ID.
 2. Download `Horizon.ipa` from the workflow artifact or the `ios-latest` prerelease, then open it in

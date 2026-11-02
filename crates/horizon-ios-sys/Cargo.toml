@@ -1,0 +1,17 @@
+[package]
+name = "horizon-ios-sys"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "The iOS system calls the game crates, which forbid unsafe code, can't make (docs/ios.md)"
+
+[dependencies]
+horizon-client-input = { path = "../horizon-client-input" }
+
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray"] }
+objc2-game-controller = { version = "0.3", default-features = false, features = ["std", "GCController", "GCExtendedGamepad", "GCPhysicalInputProfile", "GCControllerElement", "GCControllerButtonInput", "GCControllerAxisInput", "GCControllerDirectionPad", "GCDevice"] }
+
+[lints]
+workspace = true

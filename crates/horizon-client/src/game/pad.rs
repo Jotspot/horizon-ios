@@ -73,6 +73,8 @@ pub(super) struct Pads {
 
 #[cfg(all(feature = "controllers", not(target_os = "android")))]
 mod hardware;
+#[cfg(target_os = "ios")]
+pub(super) use hardware::ios_gamepad;
 pub(super) use hardware::{PadId, PadRouter};
 
 /// What a controller did since the last frame.
@@ -100,10 +102,31 @@ mod hardware {
             #[cfg(target_os = "android")]
             return horizon_client::android_runtime::keypad_state()
                 .merge(&horizon_client::android_runtime::gamepad_state());
-            #[cfg(not(target_os = "android"))]
+            #[cfg(target_os = "ios")]
+            return horizon_client::android_runtime::keypad_state().merge(&ios_gamepad());
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             PadState::default()
         }
         pub(in crate::game) fn release_hardware(&mut self) {}
+    }
+
+    /// The GameController pad; using it switches the input to the controller (the touch
+    /// controls hide), as a paired controller does on Android.
+    #[cfg(target_os = "ios")]
+    pub(in crate::game) fn ios_gamepad() -> PadState {
+        use horizon_client::{android_gamepad::InputMode, android_runtime};
+        let Some(state) = horizon_ios_sys::gamepad::state() else {
+            return PadState::default();
+        };
+        let moved = |v: [f32; 2]| v[0].abs() > 0.3 || v[1].abs() > 0.3;
+        if state.buttons != 0
+            || moved(state.left)
+            || moved(state.right)
+            || state.triggers.iter().any(|t| *t > 0.3)
+        {
+            android_runtime::note_input(InputMode::Controller);
+        }
+        state
     }
 
     pub(in crate::game) type PadId = usize;

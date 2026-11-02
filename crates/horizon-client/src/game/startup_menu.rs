@@ -875,7 +875,11 @@ impl Loading {
         #[cfg(target_os = "android")]
         crate::platform::poll_gamepad_connections();
         let state = if self.settings.controller.enabled {
-            horizon_client::android_runtime::gamepad_state()
+            #[cfg(target_os = "ios")]
+            let pad = super::pad::ios_gamepad();
+            #[cfg(not(target_os = "ios"))]
+            let pad = horizon_client::android_runtime::gamepad_state();
+            pad
         } else {
             Default::default()
         };
