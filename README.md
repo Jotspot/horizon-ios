@@ -3,8 +3,8 @@
 An iPhone port of [Horizon](https://github.com/ludovic111/horizon), the Rust engine for
 Minecraft: Java Edition 26.3. It is built on MocLG's Android port
 ([horizon-android](https://github.com/Vasysik/horizon-android)) and shares its touch controls.
-Unofficial and in early development: it boots into a world on an iPhone 14, and the in-game touch
-controls are being finished.
+Unofficial and in early development: on an iPhone 14 it plays single player with the touch
+controls, signs in with a Microsoft account and joins Java servers, with rough edges left.
 
 **iPhone · iOS 16+ · Metal · Touch controls and Bluetooth controllers · Sideloaded with SideStore or AltStore**
 
@@ -19,14 +19,13 @@ controls are being finished.
 | --- | --- |
 | Unsigned `.ipa` built on GitHub Actions (macOS) | Working: every push to `ios` refreshes the `ios-latest` prerelease |
 | Boot to the title screen, Metal rendering, full-screen landscape | Working on an iPhone 14 |
-| Touch menus, the `...` key drawer | Working on an iPhone 14 |
-| In-game touch buttons (joystick, jump...) | Fixed, waiting for a device test: their textures download on first launch |
+| Touch menus, the `...` key drawer, in-game touch buttons (joystick, jump...) | Working on an iPhone 14. The buttons' textures download on first launch |
 | Xbox, PlayStation and MFi controllers (GameController) | Written, waiting for the first device test |
-| Safe area, landscape, background and foreground | Written, waiting for the first device test |
+| Safe area, landscape, background and foreground | Working on an iPhone 14 |
 | Single-player world, saves, options and logs in the Files app | Working on an iPhone 14 |
-| iPhone keyboard in text fields | Working on an iPhone 14 |
-| Multiplayer on servers without account checks, LAN by IP | Should work, not tested on the phone yet ([details](#multiplayer-on-ios)) |
-| Microsoft sign-in, online-mode servers (Hypixel, Realms...) | Not yet: planned next ([details](#multiplayer-on-ios)) |
+| iPhone keyboard in text fields and chat | Working on an iPhone 14; chat still needs layout fixes around the notch |
+| Microsoft sign-in | Working on an iPhone 14 ([details](#multiplayer-on-ios)) |
+| Joining Java servers | Partly: some servers connect, large networks such as Hypixel and CubeCraft time out (being investigated) |
 | Preparing resources on the phone | Not on iOS: it needs a JVM. Copy prepared resources in |
 | Code mods (`.hmod` with code) | Not on iOS: they need a JIT, which iOS does not allow. Content mods load |
 | iPad, portrait, system clipboard, narrator, rumble | Not yet |
@@ -34,6 +33,22 @@ controls are being finished.
 The first target is an iPhone 14 (A15). Other iPhones with a recent iOS should behave the same,
 but only that phone is being tested. See [the plan and the design notes](docs/ios.md) for how the
 port works and what is left.
+
+## On iPhone
+
+iPhone 14 · iOS 27 · render distance 6
+
+| **Title screen** | **Touch controls** |
+| --- | --- |
+| ![Horizon's title screen on an iPhone 14, with the Account, Mouse and Back buttons](docs/media/ios/title-screen.webp) | ![A taiga forest with the joystick and action buttons](docs/media/ios/touch-controls-forest.webp) |
+
+| **Survival in a savanna village** | **Chat with the iPhone keyboard** |
+| --- | --- |
+| ![A savanna village in survival with the hotbar, health and hunger](docs/media/ios/village.webp) | ![Typing in chat above the iPhone keyboard](docs/media/ios/chat-keyboard.webp) |
+
+| **Microsoft sign-in** |
+| --- |
+| ![The Account panel showing the microsoft.com/link step, the code blurred](docs/media/ios/microsoft-sign-in.webp) |
 
 ## Multiplayer on iOS
 
@@ -45,17 +60,20 @@ network protocol itself, so it connects straight to Java servers: no Bedrock bri
 | **Servers without account checks** (`online-mode=false`) | Add the server by address and join under an offline name |
 | **A world opened to LAN on another device** | **Multiplayer → Direct Connect** with that device's IP and port. Allow local-network access when iOS asks |
 | **Hosting from the iPhone** | Open the world to LAN; others join by the iPhone's IP, while Horizon stays on screen |
-| **Online-mode servers and Realms** | Not yet. They need a signed-in Microsoft account, and the iOS app has no sign-in screen yet |
+| **Online-mode servers** | Sign in first: **Account** at the top of a menu screen. Realms is not supported by Horizon |
 | **LAN worlds listed automatically** | Not with free signing: discovery uses multicast, which needs an Apple entitlement. Use Direct Connect |
 
 iOS pauses apps that leave the screen, so switching apps for more than a few seconds drops the
 connection, and a hosted world stops for its guests.
 
-**Sign-in is the next step.** It will reuse the Microsoft device-code sign-in the Android app
-shares with the desktop launcher (`launcher/src/account.rs`): Horizon shows a short code and opens
-microsoft.com/link in Safari, you approve, and the refresh token is kept in the iOS Keychain, so you
-stay signed in. As on Android, the Microsoft app registration it uses is still a temporary
-development one, not a production approval.
+**Signing in.** Tap **Account** at the top right of a menu screen, then **Sign in**. Horizon copies
+a short code and opens microsoft.com/link in Safari with it filled in; sign in with the account
+that owns Minecraft: Java Edition, allow access, and come back. The account stays signed in between
+launches: its refresh token is kept in the iPhone's Keychain, renewed when needed, and **Sign out**
+removes it. This is the Microsoft device-code sign-in the Android app shares with the desktop
+launcher (`launcher/src/account.rs`). As on Android, it uses a public Microsoft client ID that is
+not registered for Horizon, a temporary development setup that Microsoft could stop; a build can
+use its own registration through `HORIZON_MSA_CLIENT_ID`.
 
 ## Install on an iPhone
 
