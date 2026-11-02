@@ -1,0 +1,45 @@
+# Publishes earlier iOS builds as `ios-build-<run number>` prereleases with changelogs, as
+# ios.yml now does for every new build: give it the runs' IDs, oldest first. Artifacts expire
+# after 90 days, so only recent runs can be published.
+name: iOS backfill releases
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: ios.yml run IDs, oldest first, separated by spaces
+        required: true
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Publish each run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          for run in $RUNS; do
+            case "$run" in *[!0-9]*) echo "not a run ID: $run"; exit 1;; esac
+            info=$(gh api "repos/$GH_REPO/actions/runs/$run" \
+              --jq '[.run_number, .head_sha, .head_branch, .html_url, .conclusion] | @tsv')
+            number=$(echo "$info" | cut -f1)
+            sha=$(echo "$info" | cut -f2)
+            branch=$(echo "$info" | cut -f3)
+            url=$(echo "$info" | cut -f4)
+            conclusion=$(echo "$info" | cut -f5)
+            if [ "$conclusion" != success ]; then
+              echo "run $run: $conclusion, skipped"
+              continue
+            fi
+            dir=".local/backfill/$run"
+            mkdir -p "$dir"
+            gh run download "$run" --name Horizon-ipa --dir "$dir"
+            tools/ios_release.sh "$number" "$sha" "$branch" "$dir/Horizon.ipa" "$url"
+          done

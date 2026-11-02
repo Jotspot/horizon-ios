@@ -1,6 +1,7 @@
 # The iOS build (docs/ios.md): horizon-client for aarch64-apple-ios, packed into an unsigned
-# Horizon.ipa. Every run uploads it as an artifact; pushes to `ios` also refresh the rolling
-# `ios-latest` prerelease.
+# Horizon.ipa. Every run uploads it as an artifact; every run that is not a pull request's is also
+# published as an `ios-build-<run number>` prerelease with a changelog, and pushes to `ios`
+# refresh the rolling `ios-latest` one.
 name: iOS build
 on:
   push:
@@ -11,6 +12,7 @@ on:
       - ".github/workflows/ios.yml"
       - "packaging/ios/**"
       - "tools/ios_package.sh"
+      - "tools/ios_release.sh"
       - "crates/**"
       - "third_party/**"
       - "Cargo.toml"
@@ -60,21 +62,37 @@ jobs:
           path: .local/ios/Horizon.ipa
           if-no-files-found: error
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/ios'
+    # Every successful build that is not a pull request's is published as its own prerelease,
+    # `ios-build-<run number>`, with the commits since the previous one as its changelog.
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: Horizon-ipa
+          path: .local/ios
+      - name: Publish ios-build-${{ github.run_number }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >
+          tools/ios_release.sh "${{ github.run_number }}" "$GITHUB_SHA" "$GITHUB_REF_NAME"
+          .local/ios/Horizon.ipa
+          "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - name: Refresh the ios-latest prerelease
+        if: github.ref == 'refs/heads/ios'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
           gh release delete ios-latest --cleanup-tag --yes || true
-          gh release create ios-latest Horizon.ipa --prerelease --target "$GITHUB_SHA" \
+          gh release create ios-latest .local/ios/Horizon.ipa --prerelease --target "$GITHUB_SHA" \
             --title "iOS test build (${GITHUB_SHA::7})" \
-            --notes "Unsigned test build from the \`ios\` branch at $GITHUB_SHA. Install it with SideStore or AltStore; see docs/ios.md."
+            --notes "The newest build from the \`ios\` branch; every build is also its own ios-build-N release."
