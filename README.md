@@ -93,10 +93,27 @@ The first time, allow the app under **Settings → General → VPN & Device Mana
 **Developer Mode** if iOS asks for it.
 
 **2. Copy your game files.** On a computer, let the desktop Horizon launcher prepare the game from
-your own copy of Minecraft: Java Edition; it writes `.local/horizon-client/26.3`. Copy that `26.3`
-folder to the iPhone under **Files → On My iPhone → Horizon → horizon-client → 26.3**: zip it and
-AirDrop the zip, then unzip it in Files, or use Finder's file-sharing tab with the iPhone plugged
-into a Mac.
+your own copy of Minecraft: Java Edition (sign in and press **Play** once). It writes them to
+`.local/horizon-client/26.3` inside the installed version's folder, where `<version>` is a folder
+like `v2026.10.13.1` (take the newest):
+
+| Computer | Folder to copy |
+| --- | --- |
+| macOS | `~/Library/Application Support/horizon-launcher/versions/<version>/.local/horizon-client/26.3` |
+| Windows | `%APPDATA%\horizon-launcher\versions\<version>\.local\horizon-client\26.3` |
+| Linux | `~/.local/share/horizon-launcher/versions/<version>/.local/horizon-client/26.3` |
+
+The right folder has `horizon-resources.json` directly inside it. `Library` and `.local` are hidden:
+on macOS use **Finder → Go → Go to Folder…** (Cmd+Shift+G) and paste the path, or press
+Cmd+Shift+. to show hidden files. In Terminal, this zips the newest version's folder to your Desktop:
+
+```bash
+cd "$(ls -d ~/Library/Application\ Support/horizon-launcher/versions/*/.local/horizon-client | tail -n 1)" && zip -r ~/Desktop/26.3.zip 26.3
+```
+
+Copy that `26.3` folder to the iPhone under **Files → On My iPhone → Horizon → horizon-client →
+26.3**: AirDrop the zip and unzip it in Files, or use Finder's file-sharing tab with the iPhone
+plugged into a Mac. (If you set `HORIZON_LAUNCHER_HOME`, the launcher uses that folder instead.)
 
 **3. Play.** Open Horizon with an internet connection the first time: it downloads the touch
 buttons' textures (about 30 small files from Mojang's official samples), and works offline after
