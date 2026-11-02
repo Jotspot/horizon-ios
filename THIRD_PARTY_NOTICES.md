@@ -31,7 +31,8 @@ the same grid.
 
 `third_party/winit` is [winit](https://github.com/rust-windowing/winit) 0.30.13,
 licensed under Apache-2.0 (see `third_party/winit/LICENSE`). The Android backend
-has local mouse and modifier-event fixes described in `third_party/winit/PATCHES.md`.
+has local mouse and modifier-event fixes, and the iOS backend reports the whole view as its
+inner area with the safe area as separate insets; both are described in `third_party/winit/PATCHES.md`.
 
 ## AMD FidelityFX SDK (FSR 3.1 frame generation)
 

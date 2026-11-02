@@ -1,4 +1,4 @@
-//! Extra desktop keys, a touch keyboard and menu scrolling on Android.
+//! Extra desktop keys, a touch keyboard and menu scrolling on Android and iOS.
 use super::*;
 use horizon_client::{
     debug_keys::KeyAction,
@@ -8,6 +8,7 @@ use horizon_client::{
 use winit::event::{Touch, TouchPhase};
 
 impl Game<'_> {
+    #[cfg(target_os = "android")]
     pub(crate) fn android_apply_display_scale(&mut self) {
         if let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer)
             && let Err(error) = crate::display::apply(window, renderer)
@@ -408,6 +409,14 @@ impl Game<'_> {
         if !self.pad_in_menu() {
             self.open_chat("");
         }
+        // iOS: the system keyboard comes from winit's text input for the focused field
+        // (`ime.rs`), once asked for.
+        #[cfg(target_os = "ios")]
+        {
+            crate::platform::show("");
+            return;
+        }
+        #[cfg_attr(target_os = "ios", allow(unreachable_code))]
         let initial = if self.dialog_open() {
             self.dialog_edit_value()
         } else if self.screen == Screen::BlockEditor {
@@ -467,6 +476,7 @@ impl Game<'_> {
     }
     pub(super) fn android_poll_keyboard(&mut self) {
         self.android_custom_events();
+        #[cfg(target_os = "android")]
         if let Some(notice) = crate::documents::poll() {
             if notice.changed {
                 self.refresh_pack_lists();
@@ -475,6 +485,7 @@ impl Game<'_> {
             }
             self.system_message(horizon_client::text::Text::literal(notice.text));
         }
+        #[cfg(target_os = "android")]
         for result in crate::gallery::poll() {
             self.system_message(horizon_client::text::Text::literal(
                 result.unwrap_or_else(|e| format!("File export failed: {e}")),
@@ -497,6 +508,7 @@ impl Game<'_> {
             crate::platform::hide();
         }
     }
+    #[cfg(target_os = "android")]
     pub(super) fn android_performance_context(&self) -> serde_json::Value {
         let renderer = self.renderer.as_ref().map(|r| {
             let [arena, vertices] = r.section_vertex_bytes();

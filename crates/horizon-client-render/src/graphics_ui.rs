@@ -355,7 +355,11 @@ pub fn rows(level: Level) -> Vec<Row> {
         ],
     };
     // Only Windows and Linux have more than one graphics API.
-    if cfg!(any(target_os = "macos", target_os = "android")) {
+    if cfg!(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "android"
+    )) {
         rows.retain(
             |row| !matches!(row, Row::Setting(s) if s.item == Item::Horizon(H::GraphicsApi)),
         );
@@ -685,7 +689,7 @@ impl H {
                 // Android selects the backend before creating the renderer in
                 // launcher Settings. Stale/programmatic menu actions must not
                 // save a competing backend preference for the next launch.
-                if !cfg!(target_os = "android") {
+                if !cfg!(any(target_os = "android", target_os = "ios")) {
                     g.api = step(GraphicsApi::choices(), g.api, back);
                 }
             }

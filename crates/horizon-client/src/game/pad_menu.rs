@@ -64,7 +64,7 @@ struct Pending {
 #[derive(Default)]
 pub(super) struct MenuCursor {
     /// Hardware Android arrows can focus menus before a gameplay profile is enabled.
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub(super) keyboard_focus: bool,
     /// Where the pad put the pointer (GUI pixels); `None` while the mouse
     /// has it.
@@ -137,11 +137,11 @@ impl Game<'_> {
 
     /// Focus mode is on for the open screen (the keyboard always focuses).
     fn pad_focus_mode(&self) -> bool {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if self.pad.menu.keyboard_focus || self.pad.menu.keyboard {
             return true;
         }
-        (cfg!(target_os = "android") && self.settings.keypad.enabled)
+        (cfg!(any(target_os = "android", target_os = "ios")) && self.settings.keypad.enabled)
             || ((self.settings.controller.menu_nav == MenuNav::Focus) != self.pad.menu.swapped)
     }
 
@@ -737,24 +737,25 @@ impl Game<'_> {
         self.pad.menu.last_poll = Some(now);
         self.key_focus_frame();
         let keyboard_focus = {
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
                 self.pad.menu.keyboard_focus || self.pad.menu.keyboard
             }
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 false
             }
         };
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         let navigation = !crate::touch_visible() || self.settings.keypad.enabled || keyboard_focus;
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let navigation = true;
         let in_menu = navigation
             && self.pad_in_menu()
             && (self.settings.controller.enabled
                 || keyboard_focus
-                || (cfg!(target_os = "android") && self.settings.keypad.enabled));
+                || (cfg!(any(target_os = "android", target_os = "ios"))
+                    && self.settings.keypad.enabled));
         if !in_menu {
             let menu = &mut self.pad.menu;
             menu.keyboard = false;
@@ -765,7 +766,7 @@ impl Game<'_> {
             menu.held = [false; 2];
             menu.focus = None;
             menu.swapped = false;
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
                 menu.keyboard_focus = false;
             }
@@ -969,7 +970,7 @@ impl Game<'_> {
     }
 
     fn pad_show_os_pointer(&mut self, show: bool) {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         let show = show && (!crate::touch_visible() || self.settings.keypad.enabled);
         if self.pad.menu.os_hidden != show {
             return;
@@ -1477,9 +1478,9 @@ impl Game<'_> {
             ui.finish();
             return;
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         let virtual_mouse = self.pad.touch_ui.virtual_mouse;
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let virtual_mouse = false;
         let pointer = if virtual_mouse {
             Some(self.cursor)

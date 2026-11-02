@@ -653,7 +653,11 @@ impl Graphics {
         let auto = std::thread::available_parallelism()
             .map_or(2, |n| n.get())
             // Preserve the Android fork's render/server headroom until phone profiling.
-            .saturating_sub(if cfg!(target_os = "android") { 2 } else { 1 })
+            .saturating_sub(if cfg!(any(target_os = "android", target_os = "ios")) {
+                2
+            } else {
+                1
+            })
             .max(1);
         if self.battery { auto.div_ceil(2) } else { auto }
     }
@@ -887,7 +891,11 @@ mod tests {
         assert_eq!(
             g.worker_threads(),
             cores
-                .saturating_sub(if cfg!(target_os = "android") { 2 } else { 1 })
+                .saturating_sub(if cfg!(any(target_os = "android", target_os = "ios")) {
+                    2
+                } else {
+                    1
+                })
                 .max(1)
         );
         // A manual count is the player's own choice, kept as asked.

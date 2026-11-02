@@ -132,25 +132,82 @@ pub fn controls(root: &Path) -> Result<()> {
     controls_with_progress(root, |_, _| {})
 }
 pub fn controls_with_progress(root: &Path, progress: impl Fn(u64, u64)) -> Result<()> {
-    use sha2::{Digest, Sha256};
-    use std::io::Read;
-    let manifest: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../packaging/android/bedrock-controls.json"
-    ))?;
-    let revision = manifest["revision"]
-        .as_str()
-        .ok_or("Missing control revision")?;
-    let target = root.join("assets/minecraft/textures/gui/bedrock");
-    let agent = ureq::AgentBuilder::new()
-        .redirects(0)
-        .timeout_connect(std::time::Duration::from_secs(30))
-        .timeout_read(std::time::Duration::from_secs(60))
-        .build();
-    let entries = manifest["files"]
-        .as_array()
-        .ok_or("Missing control files")?;
-    progress(0, entries.len() as u64);
-    for (index, entry) in entries.iter().enumerate() {
+    let manifest = ControlManifest::load(root)?;
+    progress(0, manifest.entries.len() as u64);
+    for (index, entry) in manifest.entries.iter().enumerate() {
+        manifest.fetch(entry)?;
+        progress(index as u64 + 1, manifest.entries.len() as u64);
+    }
+    Ok(())
+}
+
+/// [`controls`] with the files fetched eight at a time: the iOS app does this while its loading
+/// screen shows, where one file after another took ~19 s on a phone.
+pub fn controls_parallel(root: &Path) -> Result<()> {
+    let manifest = ControlManifest::load(root)?;
+    let lanes = 8;
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..lanes)
+            .map(|lane| {
+                let manifest = &manifest;
+                scope.spawn(move || -> std::result::Result<(), String> {
+                    for entry in manifest.entries.iter().skip(lane).step_by(lanes) {
+                        manifest.fetch(entry).map_err(|e| e.to_string())?;
+                    }
+                    Ok(())
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .map(|w| {
+                w.join()
+                    .unwrap_or_else(|_| Err("control download panicked".into()))
+            })
+            .collect::<std::result::Result<Vec<()>, String>>()
+    })?;
+    Ok(())
+}
+
+/// The pinned control textures (`packaging/android/bedrock-controls.json`) and where they go.
+struct ControlManifest {
+    revision: String,
+    entries: Vec<serde_json::Value>,
+    target: std::path::PathBuf,
+    agent: ureq::Agent,
+}
+
+impl ControlManifest {
+    fn load(root: &Path) -> Result<Self> {
+        let manifest: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../packaging/android/bedrock-controls.json"
+        ))?;
+        let revision = manifest["revision"]
+            .as_str()
+            .ok_or("Missing control revision")?
+            .to_owned();
+        let entries = manifest["files"]
+            .as_array()
+            .ok_or("Missing control files")?
+            .clone();
+        let agent = ureq::AgentBuilder::new()
+            .redirects(0)
+            .timeout_connect(std::time::Duration::from_secs(30))
+            .timeout_read(std::time::Duration::from_secs(60))
+            .build();
+        Ok(Self {
+            revision,
+            entries,
+            target: root.join("assets/minecraft/textures/gui/bedrock"),
+            agent,
+        })
+    }
+
+    /// One file: kept when it is already there with the pinned size and checksum, else
+    /// downloaded and checked.
+    fn fetch(&self, entry: &serde_json::Value) -> Result<()> {
+        use sha2::{Digest, Sha256};
+        use std::io::Read;
         let name = entry["path"].as_str().ok_or("Missing control path")?;
         let hash = entry["sha256"].as_str().ok_or("Missing control checksum")?;
         let size = entry["size"]
@@ -164,12 +221,11 @@ pub fn controls_with_progress(root: &Path, progress: impl Fn(u64, u64)) -> Resul
         {
             return Err("Invalid control destination".into());
         }
-        let file = target.join(relative);
+        let file = self.target.join(relative);
         if fs::read(&file).is_ok_and(|data| {
             data.len() as u64 == size && format!("{:x}", Sha256::digest(data)) == hash
         }) {
-            progress(index as u64 + 1, entries.len() as u64);
-            continue;
+            return Ok(());
         }
         let source = if name == "LICENSE.md" {
             "LICENSE.md".into()
@@ -179,10 +235,12 @@ pub fn controls_with_progress(root: &Path, progress: impl Fn(u64, u64)) -> Resul
                 entry["source"].as_str().ok_or("Missing control source")?
             )
         };
-        let url =
-            format!("https://raw.githubusercontent.com/Mojang/bedrock-samples/{revision}/{source}");
+        let url = format!(
+            "https://raw.githubusercontent.com/Mojang/bedrock-samples/{}/{source}",
+            self.revision
+        );
         let mut bytes = Vec::new();
-        agent
+        self.agent
             .get(&url)
             .call()?
             .into_reader()
@@ -193,9 +251,8 @@ pub fn controls_with_progress(root: &Path, progress: impl Fn(u64, u64)) -> Resul
         }
         fs::create_dir_all(file.parent().ok_or("Missing texture parent")?)?;
         fs::write(file, bytes)?;
-        progress(index as u64 + 1, entries.len() as u64);
+        Ok(())
     }
-    Ok(())
 }
 
 #[cfg(test)]

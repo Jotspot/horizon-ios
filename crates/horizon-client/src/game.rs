@@ -55,7 +55,7 @@ mod agent;
 mod agent_settings;
 mod allays;
 mod android_bundled;
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", target_os = "ios"))]
 mod android_input;
 mod armor_stands;
 mod atlas_slots;
@@ -568,12 +568,17 @@ impl Options {
     /// The command line alone: no file is read and nothing changes. `None` for `--help` and
     /// `--launch-api`, which print and end the run.
     fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<Self>> {
+        // iOS: beside the game folder in Documents/ (docs/ios.md).
+        #[cfg(target_os = "ios")]
+        let sibling = horizon_client::ios_paths::resources(&horizon_client::ios_paths::documents());
+        #[cfg(not(target_os = "ios"))]
         let sibling = std::env::current_exe()?
             .parent()
             .ok_or("missing executable directory")?
             .join("resources");
         let mut o = Self {
-            resources: if sibling.join("horizon-resources.json").exists() {
+            resources: if cfg!(target_os = "ios") || sibling.join("horizon-resources.json").exists()
+            {
                 sibling
             } else {
                 std::path::Path::new(".local/horizon-client").join(horizon_core::VANILLA_VERSION)
@@ -3075,12 +3080,12 @@ impl Game<'_> {
             .collect()
     }
     /// Whether a world hold should use the held item instead of mining.
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub(super) fn touch_projectile_crosshair(&self) -> bool {
         self.held()
             .is_some_and(|s| horizon_client::touch::projectile_crosshair(&s.item))
     }
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     pub(super) fn touch_item_held_use(&self) -> bool {
         self.held().is_some_and(|stack| {
             if horizon_client::touch::item_uses_on_tap(&stack.item) {
@@ -3109,31 +3114,31 @@ impl Game<'_> {
         })
     }
     pub(super) fn touch_editing(&self) -> bool {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             self.pad.touch.editor.is_some()
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             false
         }
     }
     fn interaction_crosshair(&self) -> bool {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             crate::keyboard_mouse_input()
                 || self.settings.keypad.enabled
                 || self.pad.touch.settings.crosshair()
                 || self.touch_projectile_crosshair()
         }
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             true
         }
     }
     fn interaction_direction(&self) -> [f64; 3] {
         let forward = view_vector(self.yaw, self.pitch);
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let Some(point) = self.pad.touch.aim.or(self.pad.touch_aim) {
             let fov = self.locator_camera.map_or(70.0, |c| c.3);
             let size = self.window.as_ref().map(|w| w.inner_size());
@@ -7428,7 +7433,7 @@ impl Game<'_> {
     /// A key event after rebinding, as the default key of its mapping (the
     /// keyboard and controllers both end here).
     fn mapped_key(&mut self, key: KeyCode, pressed: bool, repeat: bool) -> Result<()> {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if !pressed && self.android_custom_key_held(key) {
             return Ok(());
         }
@@ -7627,7 +7632,7 @@ impl Game<'_> {
         self.reset_inventory_clicks();
         if !capture {
             self.stop_mining();
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             crate::platform::capture_mouse(false);
         }
         // The real pointer takes over from an agent's.
@@ -7677,7 +7682,7 @@ impl Game<'_> {
                 .set_cursor_grab(CursorGrabMode::Locked)
                 .or_else(|_| window.set_cursor_grab(CursorGrabMode::Confined))
                 .is_ok();
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
                 self.captured =
                     !crate::keyboard_mouse_input() || crate::platform::capture_mouse(true);
@@ -7719,7 +7724,7 @@ impl Game<'_> {
         }
         if !self.options.offscreen {
             let pointer = !self.captured;
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             let pointer = pointer && (!crate::touch_visible() || self.settings.keypad.enabled);
             window.set_cursor_visible(pointer);
         }
@@ -7755,7 +7760,7 @@ impl Game<'_> {
         if self.title.is_none() && self.screen == Screen::Playing {
             // Resource/chunk loading is not player inactivity. In particular,
             // do not enter the world already under the one-minute AFK limit.
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
                 self.last_input = Instant::now();
             }
@@ -7905,7 +7910,25 @@ impl Game<'_> {
                 self.settings.touch.vertical_margin,
             ]
         }
-        #[cfg(not(target_os = "android"))]
+        // iOS: the HUD margins never go below the safe area (the sensor housing, the
+        // rounded corners and the home indicator); the world still draws edge to edge.
+        #[cfg(target_os = "ios")]
+        {
+            let safe = self.window.as_ref().map_or([0.0; 2], |window| {
+                use winit::platform::ios::WindowExtIOS;
+                let [left, top, right, bottom] = window.safe_area_insets();
+                let size = window.inner_size();
+                [
+                    left.max(right) as f32 / size.width.max(1) as f32,
+                    top.max(bottom) as f32 / size.height.max(1) as f32,
+                ]
+            });
+            [
+                self.settings.touch.horizontal_margin.max(safe[0]),
+                self.settings.touch.vertical_margin.max(safe[1]),
+            ]
+        }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             [0.0; 2]
         }
@@ -8058,7 +8081,7 @@ impl Game<'_> {
             // Hud.extractCrosshair / extractItemHotbar / extractPlayerHealth /
             // extractVehicleHealth and the experience bar, laid out by hud_layout.
             let indicator = self.settings.attack_indicator;
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             let indicator =
                 horizon_client::touch::attack_indicator(indicator, self.interaction_crosshair());
             let delay = horizon_client::attack_strength::delay(self.main_hand_attack_speed());
@@ -8067,7 +8090,9 @@ impl Game<'_> {
             // Android aiming schemes need a visible reticle in spectator too.
             // Tap schemes still suppress it through interaction_crosshair().
             if self.camera_type.first_person()
-                && (!spectator || cfg!(target_os = "android") || self.spectator_crosshair())
+                && (!spectator
+                    || cfg!(any(target_os = "android", target_os = "ios"))
+                    || self.spectator_crosshair())
                 && !self.debug_crosshair()
                 && self.interaction_crosshair()
             {
@@ -8094,9 +8119,9 @@ impl Game<'_> {
                     offhand_pop: (f32::from(self.hotbar_pop[9]) - partial).max(0.0),
                     attack: (indicator == 2).then_some(strength),
                 };
-                #[cfg(target_os = "android")]
+                #[cfg(any(target_os = "android", target_os = "ios"))]
                 let attack_left = Some(self.settings.touch.attack_indicator_left);
-                #[cfg(not(target_os = "android"))]
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 let attack_left = None;
                 let draws = hud_layout::hotbar_with_attack_side(wi, hi, &inputs, attack_left);
                 hud_layout::paint(&mut batch, &self.gui.atlas, &draws);
@@ -8311,7 +8336,24 @@ impl Game<'_> {
             Screen::Creative => {
                 self.draw_creative(&mut batch);
             }
-            Screen::Chat => self.draw_chat_screen(&mut batch),
+            Screen::Chat => {
+                // iOS: the chat box sits above the on-screen keyboard, as Android's resized
+                // window puts it: the screen is laid out over the part the keyboard leaves.
+                #[cfg(target_os = "ios")]
+                let full = batch.height;
+                #[cfg(target_os = "ios")]
+                if let Some(window) = &self.window {
+                    let scale = window.scale_factor();
+                    let view = f64::from(window.inner_size().height) / scale;
+                    let covered = horizon_ios_sys::keyboard::covered(view) * scale;
+                    batch.height = (batch.height - covered as f32 / batch.scale).max(1.0);
+                }
+                self.draw_chat_screen(&mut batch);
+                #[cfg(target_os = "ios")]
+                {
+                    batch.height = full;
+                }
+            }
             Screen::Mod => self.draw_mod_screen(&mut batch),
             Screen::Playing | Screen::Options | Screen::Win => {}
         }
@@ -9713,7 +9755,7 @@ impl Game<'_> {
             return;
         }
         let (slot, outside) = self.inventory_target();
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if slot.is_some() {
             self.audio.play_button_click();
         }
@@ -13450,7 +13492,7 @@ impl Game<'_> {
         )
     }
     fn apply_settings(&mut self) {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             self.pad.touch.settings = self.settings.touch.clone();
             self.pad.touch.force_crosshair =
@@ -14240,7 +14282,7 @@ impl Game<'_> {
             }
             let (tx, ty) = Creative::tab_position(t);
             if cx >= ox + tx && cx < ox + tx + 26.0 && cy >= oy + ty && cy < oy + ty + 32.0 {
-                #[cfg(target_os = "android")]
+                #[cfg(any(target_os = "android", target_os = "ios"))]
                 self.audio.play_button_click();
                 select_creative_tab(&mut self.creative_screen, &mut self.inv_clicks, i);
                 self.refresh_saved_hotbars();
@@ -14685,7 +14727,7 @@ impl Game<'_> {
             return Ok(false);
         };
         // Load the profile's scheme before drawing the first frame or outline.
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         self.pad.touch.viewport(size[0], size[1]);
         let alpha = self.clock.fraction();
         // Camera.getCameraEntityPartialTicks: the view, the hand and the
@@ -14829,11 +14871,11 @@ impl Game<'_> {
         // LevelExtractor.extractBlockOutline: model translucency controls draw order.
         let mut outline_after_terrain = false;
         let touch_target_visible = self.interaction_crosshair() || {
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
                 self.pad.touch.aim.or(self.pad.touch_aim).is_some()
             }
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 true
             }
@@ -14902,12 +14944,12 @@ impl Game<'_> {
                 Vec::new()
             };
         let mut hud = horizon_client::spans::time("hud", || self.hud(size));
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             self.pad.touch.auxiliary_only =
                 self.settings.keypad.enabled && self.pad.touch.editor.is_none();
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if self.pad.touch.editor.is_some()
             || ((crate::touch_visible() || self.settings.keypad.enabled)
                 && (!self.pad_in_menu() || self.android_inventory_controls()))
@@ -14922,11 +14964,12 @@ impl Game<'_> {
             self.pad.touch.break_progress = self.touch_mining_progress();
             self.pad.touch.draw(&mut hud, &self.gui.atlas);
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             if (crate::touch_visible() || self.settings.keypad.enabled)
                 && self.pad.touch.editor.is_none()
             {
+                self.pad.touch_ui.inset = safe_gui_insets(self.window.as_deref(), hud.scale);
                 self.pad
                     .touch_ui
                     .draw(&mut hud, &self.gui.atlas, self.pad_in_menu());
@@ -15577,7 +15620,7 @@ impl Game<'_> {
     }
     /// A mouse button while playing (window or control socket).
     fn play_mouse(&mut self, button: MouseButton, pressed: bool) -> Result<()> {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if !pressed && self.android_custom_mouse_held(button) {
             return Ok(());
         }
@@ -15810,8 +15853,8 @@ impl Game<'_> {
         let (far_distance, far_reduced) = self.far_terrain_choice();
         if let Some(renderer) = self.renderer.as_mut() {
             let g = &self.settings.horizon;
-            let mobile_uploads =
-                cfg!(target_os = "android") && self.options.execution_role.is_client();
+            let mobile_uploads = cfg!(any(target_os = "android", target_os = "ios"))
+                && self.options.execution_role.is_client();
             let budgeted = g.chunk_updates > 0 || g.upload_budget_kib > 0 || mobile_uploads;
             if !budgeted && self.pending_uploads.is_empty() && uploads.len() <= AUTO_UPLOADS_AT_ONCE
             {
@@ -15919,7 +15962,7 @@ impl Game<'_> {
     }
 }
 impl ApplicationHandler for Game<'_> {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn suspended(&mut self, _event_loop: &ActiveEventLoop) {
         // Android may recreate the surface while the IME changes window size.
         // Preserve the text session; Android hides its window on real backgrounding.
@@ -15934,10 +15977,14 @@ impl ApplicationHandler for Game<'_> {
         if let Some(renderer) = &mut self.renderer {
             renderer.suspend_surface();
         }
+        // iOS may end a backgrounded app without another call. Nothing more to do here: the
+        // pause screen just opened makes single player's server save, as vanilla's does
+        // ("Saving and pausing game...").
     }
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let Some(renderer) = &mut self.renderer {
+            #[cfg(target_os = "android")]
             if let Some(window) = &self.window {
                 match crate::display::prepare(window) {
                     Ok(Some(size)) => renderer.resize(size[0], size[1]),
@@ -15975,7 +16022,8 @@ impl ApplicationHandler for Game<'_> {
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
-                .with_visible(!self.options.offscreen),
+                .with_visible(!self.options.offscreen)
+                .platform(),
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -16078,7 +16126,7 @@ impl Game<'_> {
         {
             event.physical_key = PhysicalKey::Code(code);
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let WindowEvent::KeyboardInput { event, .. } = &event
             && event.state == ElementState::Pressed
             && let PhysicalKey::Code(key) = event.physical_key
@@ -16087,7 +16135,7 @@ impl Game<'_> {
         {
             return;
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let WindowEvent::KeyboardInput { event, .. } = &event
             && let PhysicalKey::Code(key) = event.physical_key
         {
@@ -16132,6 +16180,12 @@ impl Game<'_> {
             }
             _ => {}
         }
+        // iOS: a touch shows the touch controls. Every key event here comes from the on-screen
+        // keyboard (winit has no iOS hardware keyboard), so typing does not hide them.
+        #[cfg(target_os = "ios")]
+        if let WindowEvent::Touch(_) = &event {
+            crate::touch_input(true);
+        }
         #[cfg(target_os = "android")]
         if !self.pad_in_menu()
             && matches!(
@@ -16145,7 +16199,7 @@ impl Game<'_> {
         {
             return;
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let WindowEvent::KeyboardInput { event, .. } = &event {
             match self.android_keypad_menu_key(event_loop, event) {
                 Ok(true) => return,
@@ -16156,7 +16210,7 @@ impl Game<'_> {
                 }
             }
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if self.android_aux_mouse(event_loop, id, &event) {
             return;
         }
@@ -16192,7 +16246,7 @@ impl Game<'_> {
             }
             return;
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if self.pad.touch.editor.is_some()
             && matches!(&event,WindowEvent::KeyboardInput{event,..}
             if event.state==ElementState::Pressed && event.physical_key==PhysicalKey::Code(KeyCode::Escape))
@@ -16202,7 +16256,7 @@ impl Game<'_> {
             self.pause = false;
             return;
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let WindowEvent::Touch(touch) = &event {
             use winit::event::TouchPhase;
             self.last_input = Instant::now();
@@ -17798,7 +17852,7 @@ impl Game<'_> {
         // A splitscreen player's game has nothing to save: P1's shuts the process down.
         #[cfg(target_os = "android")]
         self.android_apply_display_scale();
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         self.android_poll_keyboard();
         #[cfg(target_os = "android")]
         if let Some(renderer) = &mut self.renderer {
@@ -19061,6 +19115,21 @@ fn load_resources(
     progress: &Progress,
     publish: &mut dyn FnMut(UiResources, &std::path::Path),
 ) -> Result<Loaded> {
+    // iOS: the touch controls' textures, which the desktop launcher does not prepare, come from
+    // Mojang's bedrock-samples at the pinned, hash-checked revision Android installs
+    // (packaging/android/bedrock-controls.json). Present files are kept, so only the first
+    // launch needs the network; without it the controls stay invisible until a later launch.
+    #[cfg(target_os = "ios")]
+    if !headless {
+        let fetched = Instant::now();
+        match horizon_client::android_resources::controls_parallel(vanilla_root) {
+            Ok(()) => log::info!(
+                "Horizon iOS: touch control textures ready in {} ms",
+                fetched.elapsed().as_millis()
+            ),
+            Err(e) => log::warn!("Horizon iOS: touch control textures not downloaded: {e}"),
+        }
+    }
     let threads = settings.horizon.worker_threads();
     horizon_client::sprites::set_texture_budget(settings.horizon.texture_budget_mib);
     horizon_client::sprites::set_labpbr_maps(shader_packs::picks_native_pack(settings));
@@ -19952,7 +20021,7 @@ impl Loading {
         Ok(())
     }
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let Some(renderer) = &mut self.renderer {
             if let Err(error) = renderer.recreate_surface() {
                 self.error = Some(error);
@@ -19988,7 +20057,8 @@ impl Loading {
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
-                .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen)),
+                .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen))
+                .platform(),
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -20094,13 +20164,13 @@ impl Loading {
         }
     }
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         self.menu_android_keyboard();
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if let Err(error) = self.menu_gamepad_frame(event_loop) {
             self.error = Some(error);
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         self.tick_menu_audio();
         // The loop may run once more after exit(): keep the first error, the
         // one that ended loading.
@@ -20232,13 +20302,13 @@ impl Loading {
         let audio = if !options.execution_role.is_client() {
             Audio::silent(&options.resources)
         } else {
-            #[cfg(target_os = "android")]
+            #[cfg(any(target_os = "android", target_os = "ios"))]
             {
                 self.menu.audio.take().unwrap_or_else(|| {
                     Audio::with_device(&options.resources, &self.settings.sound_device)
                 })
             }
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             Audio::with_device(&options.resources, &self.settings.sound_device)
         };
         let pack_error = loaded.pack_error.or_else(|| self.pack_error.take());
@@ -20281,6 +20351,46 @@ impl Loading {
     }
 }
 
+/// The left and right safe-area insets in GUI pixels (`scale` physical pixels each): where the
+/// touch UI's edge buttons go on iOS. Nothing elsewhere.
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub(crate) fn safe_gui_insets(window: Option<&Window>, scale: f32) -> [f32; 2] {
+    #[cfg(target_os = "ios")]
+    if let Some(window) = window {
+        use winit::platform::ios::WindowExtIOS;
+        let [left, _, right, _] = window.safe_area_insets();
+        let scale = scale.max(1.0);
+        return [left as f32 / scale, right as f32 / scale];
+    }
+    let _ = (window, scale);
+    [0.0; 2]
+}
+
+/// The last step of a window's attributes: what the platform needs on top of the desktop's.
+pub(crate) trait PlatformWindow {
+    fn platform(self) -> Self;
+}
+impl PlatformWindow for winit::window::WindowAttributes {
+    /// iOS: the whole screen in landscape, with the home indicator and status bar hidden and
+    /// the screen edges deferring system gestures, so a swipe from an edge reaches the game
+    /// first. The desktop's window size is dropped: UIKit would make the view that size, larger
+    /// than the screen, and show only its corner.
+    #[cfg(target_os = "ios")]
+    fn platform(mut self) -> Self {
+        use winit::platform::ios::{ScreenEdge, ValidOrientations, WindowAttributesExtIOS};
+        self.inner_size = None;
+        self.fullscreen = None;
+        self.with_prefers_home_indicator_hidden(true)
+            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::ALL)
+            .with_prefers_status_bar_hidden(true)
+            .with_valid_orientations(ValidOrientations::Landscape)
+    }
+    #[cfg(not(target_os = "ios"))]
+    fn platform(self) -> Self {
+        self
+    }
+}
+
 /// The application: the loading screen until the resources are ready, then
 /// the game itself, on the same event loop and window.
 enum App {
@@ -20288,7 +20398,7 @@ enum App {
     Ready(Box<split::Split<'static>>),
 }
 impl ApplicationHandler for App {
-    #[cfg(target_os = "android")]
+    #[cfg(any(target_os = "android", target_os = "ios"))]
     fn suspended(&mut self, event_loop: &ActiveEventLoop) {
         match self {
             App::Ready(game) => game.suspended(event_loop),
@@ -20333,7 +20443,7 @@ impl ApplicationHandler for App {
             Done,
             Failed(Box<dyn std::error::Error>),
         }
-        #[cfg(target_os = "android")]
+        #[cfg(any(target_os = "android", target_os = "ios"))]
         if matches!(self, App::Loading(loading) if loading.renderer.as_ref().is_some_and(|r| r.suspended))
         {
             // A ready worker must not recreate a surface while Android owns
@@ -20425,6 +20535,12 @@ fn missing_resources(root: &std::path::Path) -> Option<String> {
         return None;
     }
     let shown = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
+    #[cfg(target_os = "ios")]
+    return Some(format!(
+        "Horizon's prepared game files are missing: no horizon-resources.json. {}",
+        horizon_client::ios_paths::missing_resources_hint(&shown)
+    ));
+    #[cfg(not(target_os = "ios"))]
     Some(format!(
         "Horizon's prepared game files are missing: no horizon-resources.json in {}\n\
          Horizon is started from its launcher: download it at {} (Download). It needs your \

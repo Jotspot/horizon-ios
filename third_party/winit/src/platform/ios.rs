@@ -192,9 +192,19 @@ pub trait WindowExtIOS {
     ///
     /// The default is to not recognize gestures.
     fn recognize_rotation_gesture(&self, should_recognize: bool);
+
+    /// Horizon: the safe area's insets from the view's edges (the sensor housing, rounded
+    /// corners and home indicator), in physical pixels: left, top, right, bottom. The view
+    /// itself, `inner_size`, covers the whole screen.
+    fn safe_area_insets(&self) -> [u32; 4];
 }
 
 impl WindowExtIOS for Window {
+    #[inline]
+    fn safe_area_insets(&self) -> [u32; 4] {
+        self.window.maybe_wait_on_main(|w| w.safe_area_insets())
+    }
+
     #[inline]
     fn set_scale_factor(&self, scale_factor: f64) {
         self.window.maybe_queue_on_main(move |w| w.set_scale_factor(scale_factor))

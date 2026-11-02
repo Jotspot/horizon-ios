@@ -80,6 +80,10 @@ rustix = { version = "1", default-features = false, features = ["std", "time", "
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 arboard = { version = "3.6.1", default-features = false, features = ["wayland-data-control"] }
 
+# iOS: controllers through GameController, behind safe calls (docs/ios.md).
+[target.'cfg(target_os = "ios")'.dependencies]
+horizon-ios-sys = { path = "../horizon-ios-sys" }
+
 [target.'cfg(target_os = "android")'.dependencies]
 rustix = { version = "1", default-features = false, features = ["std", "fs"] }
 

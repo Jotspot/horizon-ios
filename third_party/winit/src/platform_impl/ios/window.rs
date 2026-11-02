@@ -155,12 +155,24 @@ impl Inner {
 
     pub fn pre_present_notify(&self) {}
 
+    // Horizon: the inner area is the whole view, as `Resized` and the Metal layer have it; the
+    // safe area is `safe_area_insets` (PATCHES.md).
     pub fn inner_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
-        let safe_area = self.safe_area_screen_space();
-        let position =
-            LogicalPosition { x: safe_area.origin.x as f64, y: safe_area.origin.y as f64 };
-        let scale_factor = self.scale_factor();
-        Ok(position.to_physical(scale_factor))
+        self.outer_position()
+    }
+
+    /// The safe area's insets from the view's edges, in physical pixels: left, top, right, bottom.
+    pub fn safe_area_insets(&self) -> [u32; 4] {
+        let screen = self.screen_frame();
+        let safe = self.safe_area_screen_space();
+        let scale = self.scale_factor();
+        let px = |points: f64| (points.max(0.0) * scale).round() as u32;
+        [
+            px(safe.origin.x - screen.origin.x),
+            px(safe.origin.y - screen.origin.y),
+            px((screen.origin.x + screen.size.width) - (safe.origin.x + safe.size.width)),
+            px((screen.origin.y + screen.size.height) - (safe.origin.y + safe.size.height)),
+        ]
     }
 
     pub fn outer_position(&self) -> Result<PhysicalPosition<i32>, NotSupportedError> {
@@ -184,13 +196,7 @@ impl Inner {
     }
 
     pub fn inner_size(&self) -> PhysicalSize<u32> {
-        let scale_factor = self.scale_factor();
-        let safe_area = self.safe_area_screen_space();
-        let size = LogicalSize {
-            width: safe_area.size.width as f64,
-            height: safe_area.size.height as f64,
-        };
-        size.to_physical(scale_factor)
+        self.outer_size()
     }
 
     pub fn outer_size(&self) -> PhysicalSize<u32> {

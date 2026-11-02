@@ -1,6 +1,12 @@
 //! Horizon: native Rust client for Minecraft Java Edition 26.3 gameplay.
 #![forbid(unsafe_code)]
 mod game;
+/// The iOS platform calls the shared touch glue makes (docs/ios.md).
+#[cfg(target_os = "ios")]
+#[path = "ios/platform.rs"]
+mod platform;
+#[cfg(target_os = "ios")]
+pub(crate) use platform::{keyboard_mouse_input, touch_input, touch_visible};
 
 use horizon_client::{crash, logging};
 
@@ -16,6 +22,9 @@ fn main() {
     horizon_threads::configure_allocator();
     std::hint::black_box(&MOD_API_LEVEL);
     horizon_client::telemetry::mark_start();
+    // iOS: the game folder and its home are in the app's Documents/ (docs/ios.md).
+    #[cfg(target_os = "ios")]
+    ios_start();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let game_args = args.iter().take_while(|a| *a != "--dedicated");
     let help = game_args
@@ -69,6 +78,26 @@ fn main() {
     logging::flush();
 }
 
+/// iOS starts the app with `/` as the working directory and no arguments: work in
+/// `Documents/horizon` and log there, so saves, options and logs show in the Files app.
+#[cfg(target_os = "ios")]
+fn ios_start() {
+    let documents = horizon_client::ios_paths::documents();
+    let game = horizon_client::ios_paths::game_dir(&documents);
+    let resources = horizon_client::ios_paths::resources(&documents);
+    // The empty resources folder shows the player where to copy theirs.
+    for dir in [&game, &resources] {
+        if let Err(e) = std::fs::create_dir_all(dir) {
+            eprintln!("Horizon: could not create {}: {e}", dir.display());
+        }
+    }
+    if let Err(e) = std::env::set_current_dir(&game) {
+        eprintln!("Horizon: could not enter {}: {e}", game.display());
+    }
+    logging::set_game_home(game);
+    horizon_ios_sys::keyboard::observe();
+}
+
 /// The JVM raises its open-file limit to the hard limit as it starts
 /// (`-XX:+MaxFDLimit`, on by default), so a vanilla server may hold as many
 /// sockets and region files as the host allows, not the soft default (often
@@ -79,7 +108,7 @@ fn raise_open_file_limit() {
     {
         use rustix::process::{Resource, Rlimit, getrlimit, setrlimit};
         let limit = getrlimit(Resource::Nofile);
-        let hard = if cfg!(target_os = "macos") {
+        let hard = if cfg!(any(target_os = "macos", target_os = "ios")) {
             Some(limit.maximum.map_or(10_240, |h| h.min(10_240)))
         } else {
             limit.maximum

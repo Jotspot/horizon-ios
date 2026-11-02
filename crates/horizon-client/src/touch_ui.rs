@@ -21,6 +21,9 @@ pub struct TouchUi {
     pointer_drag: Option<u64>,
     held_keys: BTreeMap<u64, KeyCode>,
     pub f3_latched: bool,
+    /// GUI pixels kept free at the left and right edges (iOS: the safe area, so the buttons
+    /// clear the rounded corners and the sensor housing). Drawing and hit tests both use it.
+    pub inset: [f32; 2],
 }
 struct RelativeTouch {
     id: u64,
@@ -285,6 +288,9 @@ impl TouchUi {
         }
     }
     pub fn action(&self, w: f32, h: f32, p: [f32; 2], menu: bool) -> Option<Action> {
+        // The buttons' own coordinates start after the left inset and end before the right.
+        let p = [p[0] - self.inset[0], p[1]];
+        let w = w - self.inset[0] - self.inset[1];
         if menu && self.virtual_mouse {
             for ([x, y, width, height], right) in mouse_button_rects(w, h) {
                 if (x..x + width).contains(&p[0]) && (y..y + height).contains(&p[1]) {
@@ -329,6 +335,8 @@ impl TouchUi {
         None
     }
     pub fn draw(&self, b: &mut HudBatch, a: &HudAtlas, menu: bool) {
+        let ox = self.inset[0];
+        let w = b.width - self.inset[0] - self.inset[1];
         for (label, x, width) in [
             ("...", 3.0, 33.0),
             ("F3", 39.0, 33.0),
@@ -347,7 +355,7 @@ impl TouchUi {
                 } else {
                     label
                 },
-                x,
+                ox + x,
                 3.0,
                 width,
             );
@@ -361,25 +369,25 @@ impl TouchUi {
                 } else {
                     "Mouse"
                 },
-                b.width - 108.0,
+                ox + w - 108.0,
                 3.0,
                 50.0,
             );
         }
         if menu && self.virtual_mouse {
-            for ([x, y, width, _], right) in mouse_button_rects(b.width, b.height) {
-                button(b, a, if right { "RMB" } else { "LMB" }, x, y, width);
+            for ([x, y, width, _], right) in mouse_button_rects(w, b.height) {
+                button(b, a, if right { "RMB" } else { "LMB" }, ox + x, y, width);
             }
         }
         if menu {
-            button(b, a, "Back", b.width - 53.0, 3.0, 50.0);
+            button(b, a, "Back", ox + w - 53.0, 3.0, 50.0);
         }
         if self.expanded {
             button(
                 b,
                 a,
                 if self.f3_latched { "F3 ON" } else { "HoldF3" },
-                3.0,
+                ox + 3.0,
                 195.0,
                 48.0,
             );
@@ -388,7 +396,7 @@ impl TouchUi {
                     b,
                     a,
                     label,
-                    3.0 + (i % 4) as f32 * 50.0,
+                    ox + 3.0 + (i % 4) as f32 * 50.0,
                     27.0 + (i / 4) as f32 * 24.0,
                     48.0,
                 );
