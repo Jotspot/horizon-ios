@@ -16003,8 +16003,6 @@ impl ApplicationHandler for Game<'_> {
         let attributes = Window::default_attributes()
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon());
-        #[cfg(target_os = "ios")]
-        let attributes = ios_window(attributes);
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -16015,7 +16013,8 @@ impl ApplicationHandler for Game<'_> {
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
-                .with_visible(!self.options.offscreen),
+                .with_visible(!self.options.offscreen)
+                .platform(),
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -20029,8 +20028,6 @@ impl Loading {
         let attributes = Window::default_attributes()
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon());
-        #[cfg(target_os = "ios")]
-        let attributes = ios_window(attributes);
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -20041,7 +20038,8 @@ impl Loading {
             attributes
                 .with_inner_size(winit::dpi::LogicalSize::new(size[0], size[1]))
                 .with_fullscreen(fullscreen.then_some(winit::window::Fullscreen::Borderless(None)))
-                .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen)),
+                .with_visible(!self.options.as_ref().is_some_and(|o| o.offscreen))
+                .platform(),
         ) {
             Ok(w) => Arc::new(w),
             Err(e) => {
@@ -20334,18 +20332,29 @@ impl Loading {
     }
 }
 
-/// iOS: full screen in landscape, with the home indicator and status bar hidden, and the
-/// screen edges deferring system gestures so a swipe from an edge reaches the game first.
-#[cfg(target_os = "ios")]
-pub(crate) fn ios_window(
-    attributes: winit::window::WindowAttributes,
-) -> winit::window::WindowAttributes {
-    use winit::platform::ios::{ScreenEdge, ValidOrientations, WindowAttributesExtIOS};
-    attributes
-        .with_prefers_home_indicator_hidden(true)
-        .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::ALL)
-        .with_prefers_status_bar_hidden(true)
-        .with_valid_orientations(ValidOrientations::Landscape)
+/// The last step of a window's attributes: what the platform needs on top of the desktop's.
+pub(crate) trait PlatformWindow {
+    fn platform(self) -> Self;
+}
+impl PlatformWindow for winit::window::WindowAttributes {
+    /// iOS: the whole screen in landscape, with the home indicator and status bar hidden and
+    /// the screen edges deferring system gestures, so a swipe from an edge reaches the game
+    /// first. The desktop's window size is dropped: UIKit would make the view that size, larger
+    /// than the screen, and show only its corner.
+    #[cfg(target_os = "ios")]
+    fn platform(mut self) -> Self {
+        use winit::platform::ios::{ScreenEdge, ValidOrientations, WindowAttributesExtIOS};
+        self.inner_size = None;
+        self.fullscreen = None;
+        self.with_prefers_home_indicator_hidden(true)
+            .with_preferred_screen_edges_deferring_system_gestures(ScreenEdge::ALL)
+            .with_prefers_status_bar_hidden(true)
+            .with_valid_orientations(ValidOrientations::Landscape)
+    }
+    #[cfg(not(target_os = "ios"))]
+    fn platform(self) -> Self {
+        self
+    }
 }
 
 /// The application: the loading screen until the resources are ready, then

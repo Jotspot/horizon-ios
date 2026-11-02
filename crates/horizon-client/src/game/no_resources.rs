@@ -100,8 +100,7 @@ impl ApplicationHandler for Missing {
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon())
             .with_inner_size(winit::dpi::LogicalSize::new(1040.0, 700.0));
-        #[cfg(target_os = "ios")]
-        let attributes = super::ios_window(attributes);
+        let attributes = super::PlatformWindow::platform(attributes);
         let made = event_loop
             .create_window(attributes)
             .map_err(Into::into)
