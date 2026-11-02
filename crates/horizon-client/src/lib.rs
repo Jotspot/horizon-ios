@@ -167,6 +167,11 @@ pub use horizon_items::random_sequences;
 
 pub use horizon_client_render::{android_gamepad, android_runtime, file_lock, keypad, touch};
 
+/// The iOS app's folders (docs/ios.md).
+#[cfg(target_os = "ios")]
+#[path = "ios/paths.rs"]
+pub mod ios_paths;
+
 #[cfg(test)]
 #[path = "android/device_preferences.rs"]
 mod android_device_preferences;

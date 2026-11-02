@@ -568,12 +568,17 @@ impl Options {
     /// The command line alone: no file is read and nothing changes. `None` for `--help` and
     /// `--launch-api`, which print and end the run.
     fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<Self>> {
+        // iOS: beside the game folder in Documents/ (docs/ios.md).
+        #[cfg(target_os = "ios")]
+        let sibling = horizon_client::ios_paths::resources(&horizon_client::ios_paths::documents());
+        #[cfg(not(target_os = "ios"))]
         let sibling = std::env::current_exe()?
             .parent()
             .ok_or("missing executable directory")?
             .join("resources");
         let mut o = Self {
-            resources: if sibling.join("horizon-resources.json").exists() {
+            resources: if cfg!(target_os = "ios") || sibling.join("horizon-resources.json").exists()
+            {
                 sibling
             } else {
                 std::path::Path::new(".local/horizon-client").join(horizon_core::VANILLA_VERSION)
@@ -20425,6 +20430,12 @@ fn missing_resources(root: &std::path::Path) -> Option<String> {
         return None;
     }
     let shown = std::path::absolute(root).unwrap_or_else(|_| root.to_path_buf());
+    #[cfg(target_os = "ios")]
+    return Some(format!(
+        "Horizon's prepared game files are missing: no horizon-resources.json. {}",
+        horizon_client::ios_paths::missing_resources_hint(&shown)
+    ));
+    #[cfg(not(target_os = "ios"))]
     Some(format!(
         "Horizon's prepared game files are missing: no horizon-resources.json in {}\n\
          Horizon is started from its launcher: download it at {} (Download). It needs your \

@@ -331,6 +331,22 @@ impl Settings {
             .and_then(|mode| self.video_modes.iter().position(|m| *m == mode))
             .map_or(-1, |i| i as i32)
     }
+    /// The settings of a game folder with no `options.txt` yet. On iOS, lighter ones for a phone's
+    /// memory and heat (docs/ios.md); the player's own choices replace them once saved.
+    fn first_run() -> Self {
+        let defaults = Self::default();
+        if cfg!(target_os = "ios") {
+            Self {
+                render_distance: 6,
+                simulation_distance: 6,
+                max_fps: 60,
+                clouds: "false".into(),
+                ..defaults
+            }
+        } else {
+            defaults
+        }
+    }
     pub fn load(path: &Path) -> Self {
         let horizon = path
             .parent()
@@ -368,7 +384,7 @@ impl Settings {
                 keypad,
                 extras,
                 mods,
-                ..Self::default()
+                ..Self::first_run()
             },
         };
         settings.describe_for_crashes();
