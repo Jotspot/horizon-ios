@@ -20,7 +20,7 @@ controls, signs in with a Microsoft account and joins Java servers, with rough e
 | Unsigned `.ipa` built on GitHub Actions (macOS) | Working: every push to `ios` refreshes the `ios-latest` prerelease |
 | Boot to the title screen, Metal rendering, full-screen landscape | Working on an iPhone 14 |
 | Touch menus, the `...` key drawer, in-game touch buttons (joystick, jump...) | Working on an iPhone 14. The buttons' textures download on first launch |
-| Xbox, PlayStation and MFi controllers (GameController) | Written, waiting for the first device test |
+| Bluetooth controllers through GameController (Xbox, PlayStation, MFi...) | Working on an iPhone 14 with a GameSir Nova Lite |
 | Safe area, landscape, background and foreground | Working on an iPhone 14 |
 | Single-player world, saves, options and logs in the Files app | Working on an iPhone 14 |
 | iPhone keyboard in text fields and chat | Working on an iPhone 14; chat above the keyboard and clear of the notch fixed, waiting for a device test |
