@@ -11,6 +11,13 @@ use horizon_client::{
 impl Game<'_> {
     /// Whether a text box has focus right now (the fields `ime_commit` can fill).
     pub(super) fn text_field_focused(&mut self) -> bool {
+        // iOS: the Options screen's search boxes (settings, language, packs) need the on-screen
+        // keyboard, which only comes for a focused field; checked before the title's own fields,
+        // as Options also opens over the title screen. A desktop keyboard types there anyway.
+        #[cfg(target_os = "ios")]
+        if self.screen == Screen::Options {
+            return self.ui.options.typing();
+        }
         if self.dialog_open() {
             return self.dialog_has_text_field();
         }
