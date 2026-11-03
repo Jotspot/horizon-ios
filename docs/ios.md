@@ -159,6 +159,15 @@ reader:
 - This covers Xbox, PlayStation (DualShock 4, DualSense), MFi and Switch Pro controllers paired over
   Bluetooth. Rumble (`GCDeviceHaptics`) can come later.
 
+## Gyro aiming
+
+Touch Controls → Gyroscope turns the view with the phone, as on Android. `horizon-ios-sys::motion`
+reads CoreMotion's device-motion rotation rate (bias-corrected gyroscope) once a frame in pull
+mode, and starts the sensor only while gyro aiming applies (the setting on, in a world, touch
+input); it stops otherwise and when the app is suspended. The rate goes through Android's
+`android/device_math.rs` (`gyro_delta`), with the window scene's interface orientation mapped to
+Android's rotation numbers, so the sensitivity and the axes for each landscape side match.
+
 ## Microsoft account
 
 Online-mode servers need a signed-in account. On desktop the launcher signs in and hands the game a
@@ -225,9 +234,9 @@ Library/Caches/horizon/  ← things that can be rebuilt: shader cache, downloade
 - An iPhone 14 has 6 GB of RAM. Jetsam usually kills a foreground app at around 2.8–3 GB. The
   `com.apple.developer.kernel.increased-memory-limit` entitlement raises that limit, but free Apple ID
   signing (SideStore/AltStore without a paid account) may remove it, so we cannot count on it.
-- iOS defaults, applied only when `options.txt` does not exist yet (the player's choices always win):
-  **render distance 6**, simulation distance 6, a lower resolution scale, fast graphics, clouds off,
-  and the frame limit at the display's 60 Hz.
+- iOS defaults, applied only while `options.txt` or `horizon-graphics.txt` does not exist yet (the player's
+  choices always win): **render distance 6**, simulation distance 6, clouds off and a 60 FPS limit
+  (`Settings::first_run`), and Battery Mode on with Resolution Scale 75% (`Graphics::first_run`).
 - Worker threads: the A15 has 2 performance and 4 efficiency cores. The streaming pool starts with 3
   workers so the render thread and the server thread keep a performance core each.
 - `wgpu::MemoryHints::MemoryUsage` (already chosen for Android) on iOS too. `MAPPABLE_PRIMARY_BUFFERS`

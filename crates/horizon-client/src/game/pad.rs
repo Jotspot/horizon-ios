@@ -662,6 +662,21 @@ impl Game<'_> {
 
     /// The right stick turns the view, once per frame (`Entity.turn`).
     pub(super) fn pad_look(&mut self, seconds: f32) {
+        // iOS: the same gyro aiming as Android's below, from CoreMotion.
+        #[cfg(target_os = "ios")]
+        {
+            let enabled = self.settings.touch.gyroscope
+                && !self.pad_in_menu()
+                && self.player.is_some()
+                && self.pad_focused()
+                && crate::touch_visible();
+            let delta = crate::gyro::delta(enabled, self.settings.touch.gyro_sensitivity, seconds);
+            if enabled {
+                self.tutorial
+                    .mouse(f64::from(delta[0]), f64::from(delta[1]));
+                self.turn_player(f64::from(delta[0] / 0.15), f64::from(delta[1] / 0.15));
+            }
+        }
         #[cfg(target_os = "android")]
         {
             let enabled = self.settings.touch.gyroscope

@@ -216,3 +216,111 @@ pub mod dns {
         Some(answer)
     }
 }
+
+/// The gyroscope through CoreMotion, for gyro aiming (Options → Controls → Touch Controls). Read
+/// once a frame on the main thread; updates stop while gyro aiming is off, so the sensor draws no
+/// power then.
+#[cfg(target_os = "ios")]
+pub mod motion {
+    use objc2::encode::{Encode, Encoding};
+    use objc2::msg_send;
+    use objc2::rc::Retained;
+    use objc2::runtime::{AnyClass, AnyObject, Bool};
+    use std::cell::RefCell;
+
+    #[link(name = "CoreMotion", kind = "framework")]
+    unsafe extern "C" {}
+
+    /// `CMRotationRate`: radians a second around the device's x (right), y (up, in portrait)
+    /// and z (out of the screen) axes, counter-clockwise positive, as Android's gyroscope.
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct RotationRate {
+        x: f64,
+        y: f64,
+        z: f64,
+    }
+    // Safety: the layout and encoding of CoreMotion's `{?=ddd}` struct.
+    unsafe impl Encode for RotationRate {
+        const ENCODING: Encoding =
+            Encoding::Struct("?", &[Encoding::Double, Encoding::Double, Encoding::Double]);
+    }
+
+    thread_local! {
+        static MANAGER: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
+    }
+
+    /// The device's rotation rate now, starting the sensor when `active` and stopping it when
+    /// not; `None` without a gyroscope or before its first sample.
+    pub fn rate(active: bool) -> Option<[f32; 3]> {
+        MANAGER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if !active {
+                if let Some(manager) = slot.take() {
+                    // Safety: a CMMotionManager this module made, on the main thread.
+                    unsafe {
+                        let _: () = msg_send![&*manager, stopDeviceMotionUpdates];
+                    }
+                }
+                return None;
+            }
+            if slot.is_none() {
+                let class = AnyClass::get(c"CMMotionManager")?;
+                // Safety: `+new` of CMMotionManager, then its documented setup on the main
+                // thread: whether device motion exists, its interval, and pull-mode updates.
+                let manager: Retained<AnyObject> = unsafe { msg_send![class, new] };
+                let available: Bool = unsafe { msg_send![&*manager, isDeviceMotionAvailable] };
+                if !available.as_bool() {
+                    return None;
+                }
+                unsafe {
+                    let _: () = msg_send![&*manager, setDeviceMotionUpdateInterval: 1.0f64 / 60.0];
+                    let _: () = msg_send![&*manager, startDeviceMotionUpdates];
+                }
+                *slot = Some(manager);
+            }
+            let manager = slot.as_ref()?;
+            // Safety: the latest CMDeviceMotion (nil before the first sample) and its
+            // `rotationRate`, the bias-corrected gyroscope reading.
+            let rate: RotationRate = unsafe {
+                let motion: *mut AnyObject = msg_send![&**manager, deviceMotion];
+                if motion.is_null() {
+                    return None;
+                }
+                msg_send![motion, rotationRate]
+            };
+            Some([rate.x as f32, rate.y as f32, rate.z as f32])
+        })
+    }
+
+    /// How the interface is turned, as Android's `Display.getRotation` counts it: 0 portrait,
+    /// 1 landscape with the home side on the right, 2 upside down, 3 landscape with it on the left.
+    pub fn interface_rotation() -> i32 {
+        let Some(application) = AnyClass::get(c"UIApplication") else {
+            return 1;
+        };
+        // Safety: the shared application's connected scenes, on the main thread; a window
+        // scene's `interfaceOrientation` (UIInterfaceOrientation, an NSInteger).
+        let orientation: isize = unsafe {
+            let shared: *mut AnyObject = msg_send![application, sharedApplication];
+            if shared.is_null() {
+                return 1;
+            }
+            let scenes: *mut AnyObject = msg_send![shared, connectedScenes];
+            if scenes.is_null() {
+                return 1;
+            }
+            let scene: *mut AnyObject = msg_send![scenes, anyObject];
+            if scene.is_null() {
+                return 1;
+            }
+            msg_send![scene, interfaceOrientation]
+        };
+        match orientation {
+            1 => 0, // UIInterfaceOrientationPortrait
+            2 => 2, // UIInterfaceOrientationPortraitUpsideDown
+            4 => 3, // UIInterfaceOrientationLandscapeLeft: home side on the left
+            _ => 1, // UIInterfaceOrientationLandscapeRight, or unknown: the game's landscape
+        }
+    }
+}

@@ -464,8 +464,7 @@ fn bool_text(v: bool) -> &'static str {
 impl Graphics {
     pub fn load(dir: &Path) -> Self {
         let mut g: Self = fs::read_to_string(dir.join(FILE))
-            .map(|t| Self::parse(&t))
-            .unwrap_or_default();
+            .map_or_else(|_| Self::first_run(), |t| Self::parse(&t));
         if fs::remove_file(dir.join(HDR_MARKER)).is_ok() && g.hdr {
             g.hdr = false;
             g.save(dir);
@@ -474,6 +473,22 @@ impl Graphics {
             );
         }
         g
+    }
+    /// The settings of a game folder with none saved yet. On iOS, a phone's: battery mode (60
+    /// frames a second in a world, 30 in menus, half the workers) and the world at 75% of the
+    /// screen's 3x resolution, which a phone's battery and heat notice and its eye barely does
+    /// (docs/ios.md). The player's own choices replace them once saved.
+    fn first_run() -> Self {
+        let defaults = Self::default();
+        if cfg!(target_os = "ios") {
+            Self {
+                battery: true,
+                resolution_scale: 75,
+                ..defaults
+            }
+        } else {
+            defaults
+        }
     }
     pub fn parse(text: &str) -> Self {
         let mut g = Self::default();
