@@ -15976,6 +15976,9 @@ impl ApplicationHandler for Game<'_> {
         if let Some(renderer) = &mut self.renderer {
             renderer.suspend_surface();
         }
+        // iOS: the gyroscope stops with the game.
+        #[cfg(target_os = "ios")]
+        crate::gyro::delta(false, 1.0, 0.0);
         // iOS may end a backgrounded app without another call. Nothing more to do here: the
         // pause screen just opened makes single player's server save, as vanilla's does
         // ("Saving and pausing game...").

@@ -21,6 +21,7 @@ controls, signs in with a Microsoft account and joins Java servers, with rough e
 | Boot to the title screen, Metal rendering, full-screen landscape | Working on an iPhone 14 |
 | Touch menus, the `...` key drawer, in-game touch buttons (joystick, jump...) | Working on an iPhone 14. The buttons' textures download on first launch |
 | Bluetooth controllers through GameController (Xbox, PlayStation, MFi...) | Working on an iPhone 14 with a GameSir Nova Lite |
+| Gyro aiming (Touch Controls → Gyroscope) | Written, waiting for a device test |
 | Safe area, landscape, background and foreground | Working on an iPhone 14 |
 | Single-player world, saves, options and logs in the Files app | Working on an iPhone 14 |
 | iPhone keyboard in text fields and chat | Working on an iPhone 14; chat above the keyboard and clear of the notch fixed, waiting for a device test |
@@ -49,6 +50,25 @@ iPhone 14 · iOS 27 · render distance 17
 | **Microsoft sign-in** |
 | --- |
 | ![The Account panel showing the microsoft.com/link step, the code blurred](docs/media/ios/microsoft-sign-in.webp) |
+
+## Battery life
+
+Horizon renders a full Java Edition world, so it uses far more power than most phone games. What
+helps most, in order:
+
+1. **Render distance** (Options → Video Settings): every chunk is generated, meshed and drawn.
+   8 to 10 chunks costs much less than 17, and still looks good on a phone screen.
+2. **Battery Mode** (Video Settings → Performance): at most 60 frames a second in a world and 30 in
+   menus, and half the worker threads. On by default on iOS.
+3. **Resolution Scale** (Video Settings → Display): the world at a percentage of the screen's
+   2532×1170 pixels. 75% (the iOS default) draws about 44% fewer pixels; 60–70% is hard to tell
+   apart on a 6-inch screen. The HUD and text stay sharp.
+4. **Max Framerate** 30 if you don't mind it, and **Clouds** off.
+
+iOS Low Power Mode also caps frame rates and works with Horizon. A phone that gets hot slows
+itself down, so the settings above often make the game smoother too. New installs start with
+Battery Mode on and resolution at 75%; an existing install keeps the settings it has, so change
+them by hand once.
 
 ## Multiplayer on iOS
 

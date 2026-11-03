@@ -25,6 +25,13 @@ mod proxy;
 #[allow(dead_code)]
 #[path = "../../../launcher/src/skins.rs"]
 mod skins;
+/// Gyro aiming: CoreMotion's rate through the Android port's conversion.
+#[cfg(target_os = "ios")]
+#[path = "ios/gyro.rs"]
+mod gyro;
+#[cfg(target_os = "ios")]
+#[path = "android/device_math.rs"]
+mod gyro_math;
 #[cfg(target_os = "ios")]
 #[path = "ios/secure_store.rs"]
 mod secure_store;
